@@ -7,6 +7,7 @@ import type {
   ValidationReport,
   ValidationResult,
 } from '../types';
+import { roleOfType } from '../pages/propositionData';
 
 export interface ValidatorInput extends ValidationAgentInput {
   /** 同卷其他题，用于重复校验；MVP 使用关键词匹配。 */
@@ -196,7 +197,8 @@ export function checkCorrectness(input: ValidatorInput): ValidationResult {
   if (!question.answer.trim()) issues.push('答案为空，无法独立复算。');
   if (!question.analysis.trim()) issues.push('解析为空，无法核对自洽性。');
 
-  if (question.type === '单项选择题') {
+  const role = roleOfType(question.type);
+  if (role === 'choice') {
     const options = question.options ?? [];
     if (options.length !== 4) issues.push(`选项数量 ${options.length}，应为 4。`);
     const labels = new Set(options.map((option) => option.label));
@@ -228,7 +230,7 @@ export function checkCorrectness(input: ValidatorInput): ValidationResult {
   return gate('正确性校验', '通过', [
     `答案 ${question.answer} 可独立复算。`,
     `解析与评分点自洽，评分点合计 ${scoringTotal} 分。`,
-    ...(question.type === '单项选择题'
+    ...(role === 'choice'
       ? ['选项标签互异、内容互斥，答案标签存在于选项中。']
       : ['主观题按评分点结构核对，答案与解析非空。']),
   ]);
@@ -312,6 +314,7 @@ export function checkDuplicate(input: ValidatorInput): ValidationResult {
 
 export function checkFormat(input: ValidatorInput): ValidationResult {
   const question = input.question;
+  const role = roleOfType(question.type);
   const issues: string[] = [];
   const cell = findCell(input);
 
@@ -319,15 +322,14 @@ export function checkFormat(input: ValidatorInput): ValidationResult {
   if (!question.type) issues.push('题型缺失。');
   if (!question.chapter) issues.push('所属章节缺失。');
 
-  if (question.type === '单项选择题' && question.options?.length !== 4) {
+  if (role === 'choice' && question.options?.length !== 4) {
     issues.push('单项选择题必须包含 4 个选项。');
   }
-  if (question.type === '填空题' && !question.stem.includes('______')) {
+  if (role === 'fill' && !question.stem.includes('______')) {
     issues.push('填空题缺少作答横线。');
   }
   if (
-    (question.type === '简答与分析题' ||
-      question.type === '算法设计与分析题') &&
+    (role === 'short' || role === 'algorithm' || role === 'other') &&
     question.scoringPoints.length === 0
   ) {
     issues.push('主观题缺少评分点。');

@@ -11,6 +11,7 @@ import type {
   ValidationReport,
 } from '../types';
 import type { PropositionContext } from '../pages/propositionData';
+import { COURSE_PACK } from '../courses/active';
 import {
   AgentSchemaError,
   validateArbitrationInput,
@@ -134,7 +135,7 @@ export interface SchedulerHooks {
 
 const CONCURRENCY = 3;
 const RETRY_LIMIT = 2;
-const FIRST_TWO_CANDIDATE_TASK = 11;
+const FIRST_TWO_CANDIDATE_TASK = COURSE_PACK.demoProfile.firstDoubleIndex;
 
 const delay = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));

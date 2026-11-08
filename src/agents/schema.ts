@@ -16,6 +16,8 @@ import type {
   ValidationAgentOutput,
   ValidationGate,
 } from '../types';
+import { COURSE_PACK } from '../courses/active';
+import { roleOfType } from '../pages/propositionData';
 
 export class AgentSchemaError extends Error {
   readonly agent: AgentName;
@@ -119,7 +121,7 @@ const assertCandidate = (candidate: CandidateQuestion): void => {
     'candidate.generation 字段不完整',
   );
 
-  if (candidate.type === '单项选择题') {
+  if (roleOfType(candidate.type) === 'choice') {
     check(
       Array.isArray(candidate.options) && candidate.options.length === 4,
       '命题 Agent',
@@ -310,10 +312,10 @@ export function validateComposeOutput(output: ComposeAgentOutput): void {
     '考试时长无效',
   );
   check(
-    draft.timeAllocation.length === 4 &&
+    draft.timeAllocation.length === COURSE_PACK.questionTypes.length &&
       draft.timeAllocation.every((item) => item.minutes >= 0),
     '组卷 Agent',
-    '时间分配不足四类题型',
+    '时间分配必须覆盖当前课程的全部题型',
   );
   const allocated = draft.timeAllocation.reduce(
     (total, item) => total + item.minutes,
