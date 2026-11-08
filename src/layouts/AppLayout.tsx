@@ -2,18 +2,29 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { PAGE_ROUTES } from '../router/routes';
 import {
   PAPER_STATUS_FLOW,
-  PIPELINE_STAGES,
   usePaperStore,
 } from '../store';
+import { ACTIVE_COURSE } from '../courses/active';
+import { useCourseStore } from '../courses/store';
+import PipelineProgress from '../components/PipelineProgress';
+import CourseDialog from '../components/CourseDialog';
 
-const ARCHITECTURE_LAYERS = ['交互层', '编译层', '协同层', '数据层', '模型层'];
+const STEP_OF_ROUTE: Record<string, number> = {
+  '/outline': 1,
+  '/knowledge': 2,
+  '/blueprint': 3,
+  '/contract': 4,
+  '/proposition': 5,
+  '/review': 6,
+  '/compose': 7,
+  '/replay': 7,
+};
 
 export default function AppLayout() {
   const { pathname } = useLocation();
   const status = usePaperStore((state) => state.status);
-  const stage = usePaperStore((state) => state.stage);
-  const stageIndex = PIPELINE_STAGES.indexOf(stage) + 1;
   const currentPage = PAGE_ROUTES.find((route) => route.path === pathname);
+  const openCourseDialog = useCourseStore((state) => state.openDialog);
 
   return (
     <div className="app">
@@ -23,45 +34,60 @@ export default function AppLayout() {
           <span className="brand-en">PaperCompile</span>
         </div>
 
-        <p className="sidebar-caption">主页面</p>
+        <button type="button" className="sidebar-course" onClick={openCourseDialog}>
+          <span className="sidebar-course-label">当前课程</span>
+          <strong>{ACTIVE_COURSE.name}</strong>
+          <small>
+            {ACTIVE_COURSE.examName} · {ACTIVE_COURSE.chapterCount} 章 ·{' '}
+            {ACTIVE_COURSE.questionCount} 题
+          </small>
+          <span className="sidebar-course-action">切换 / 新建课程</span>
+        </button>
+
+        <p className="sidebar-caption">八个主页面 · 七步闭环</p>
         <nav className="nav" aria-label="主页面">
-          {PAGE_ROUTES.map((route, index) => (
+          {PAGE_ROUTES.map((route) => (
             <NavLink
               key={route.path}
               to={route.path}
               className={({ isActive }) => (isActive ? 'nav-item is-active' : 'nav-item')}
             >
-              <span className="nav-index">{String(index + 1).padStart(2, '0')}</span>
-              {route.label}
+              <span className="nav-index">
+                {String(STEP_OF_ROUTE[route.path] ?? 0).padStart(2, '0')}
+              </span>
+              <span className="nav-text">
+                <strong>{route.label}</strong>
+                <small>{route.duty}</small>
+              </span>
             </NavLink>
           ))}
         </nav>
 
         <div className="sidebar-footer">
-          <p className="sidebar-caption">五层架构</p>
-          <p className="layer-list">
-            {ARCHITECTURE_LAYERS.map((layer) => (
-              <span key={layer}>{layer}</span>
-            ))}
+          <p className="sidebar-caption">当前会话</p>
+          <p className="sidebar-session">
+            <span>李老师 · 主讲教师</span>
+            <span>试卷状态 {status}</span>
           </p>
+          <p className="sidebar-policy">AI 辅助命题，教师终审；不自动定稿。</p>
         </div>
       </aside>
 
       <div className="workspace">
         <header className="topbar">
-          <div className="breadcrumb">
-            <span>题衡 PaperCompile</span>
-            {currentPage && (
-              <>
-                <span className="breadcrumb-sep">/</span>
-                <strong>{currentPage.label}</strong>
-              </>
-            )}
-          </div>
-
-          <div className="pipeline-stage" title="七步闭环">
-            <span>阶段 {stageIndex}/7</span>
-            <strong>{stage}</strong>
+          <div className="topbar-left">
+            <div className="breadcrumb">
+              <span>题衡 PaperCompile</span>
+              {currentPage && (
+                <>
+                  <span className="breadcrumb-sep">/</span>
+                  <strong>{currentPage.label}</strong>
+                </>
+              )}
+            </div>
+            <span className="topbar-stage">
+              第 {STEP_OF_ROUTE[pathname] ?? 1} / 7 步
+            </span>
           </div>
 
           <div className="status-wrap">
@@ -82,10 +108,14 @@ export default function AppLayout() {
           </div>
         </header>
 
+        <PipelineProgress />
+
         <main className="main">
           <Outlet />
         </main>
       </div>
+
+      <CourseDialog />
     </div>
   );
 }
