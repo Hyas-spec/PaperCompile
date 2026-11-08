@@ -39,6 +39,18 @@ npm run preview
 
 打开 `http://localhost:4173/`。同样**不要**直接双击 `dist/index.html`；`dist/assets` 使用绝对路径，需由 `vite preview` 提供 HTTP 服务。
 
+### 停止服务
+
+- 回到启动时弹出的命令行窗口，按 `Ctrl+C`；如提示“终止批处理操作吗(Y/N)?”，输入 `Y` 回车，然后关闭窗口。浏览器标签页可单独关闭，关闭标签页不会停止服务。
+- 如果窗口已经关闭但端口仍被占用，在 PowerShell 中执行：
+
+```powershell
+Get-NetTCPConnection -LocalPort 5173 -State Listen -ErrorAction SilentlyContinue |
+  ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
+```
+
+预览服务把端口换成 `4173` 即可。也可用 `netstat -ano | findstr :5173` 找到 PID，再执行 `taskkill /PID <PID> /F`。
+
 要求 Node.js 18+（安装包自带 `npm`；终端执行 `node -v`、`npm -v` 可检查）。若使用 pnpm，可把命令替换为 `pnpm install` / `pnpm dev`。项目为纯前端 MVP，不依赖后端、数据库或 DOCX/PDF 库；打印使用浏览器原生 `window.print()`。
 
 ## 七步闭环
