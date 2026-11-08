@@ -46,6 +46,7 @@ a {
 .app {
   display: grid;
   grid-template-columns: var(--pc-sidebar-width) minmax(0, 1fr);
+  height: 100vh;
   min-height: 100vh;
 }
 
@@ -163,6 +164,7 @@ a {
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
 }
 
 .topbar {
@@ -249,7 +251,9 @@ a {
   flex: 1;
   display: flex;
   flex-direction: column;
+  min-height: 0;
   padding: var(--pc-gap-lg);
+  overflow: auto;
 }
 
 .page {
@@ -330,6 +334,7 @@ a {
 @media (max-width: 760px) {
   .app {
     grid-template-columns: 1fr;
+    height: auto;
   }
 
   .sidebar {
@@ -350,6 +355,7 @@ a {
 
   .main {
     padding: var(--pc-gap);
+    overflow: visible;
   }
 
   .page-panel {

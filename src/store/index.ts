@@ -16,6 +16,20 @@ export const PIPELINE_STAGES = [
 ] as const;
 export type PipelineStage = (typeof PIPELINE_STAGES)[number];
 
+/** 大纲解析生成的知识点草稿（尚未审定） */
+export interface KnowledgePointDraft {
+  id: string;
+  name: string;
+  chapterId: string;
+  chapter: string;
+  chapterNo: number;
+  paragraphId: string;
+  anchor: string;
+  excerpt: string;
+  requirement: string;
+  empty: boolean;
+}
+
 export function nextStatus(current: PaperStatus): PaperStatus | null {
   const index = PAPER_STATUS_FLOW.indexOf(current);
   return index >= 0 && index < PAPER_STATUS_FLOW.length - 1
@@ -33,13 +47,16 @@ export function nextStage(current: PipelineStage): PipelineStage | null {
 interface PaperState {
   status: PaperStatus;
   stage: PipelineStage;
+  knowledgeDraft: KnowledgePointDraft[] | null;
   advanceStatus: () => void;
   advanceStage: () => void;
+  setKnowledgeDraft: (items: KnowledgePointDraft[]) => void;
 }
 
 export const usePaperStore = create<PaperState>((set, get) => ({
   status: '草稿',
   stage: '大纲',
+  knowledgeDraft: null,
   advanceStatus: () => {
     const next = nextStatus(get().status);
     if (next) set({ status: next });
@@ -48,4 +65,5 @@ export const usePaperStore = create<PaperState>((set, get) => ({
     const next = nextStage(get().stage);
     if (next) set({ stage: next });
   },
+  setKnowledgeDraft: (items) => set({ knowledgeDraft: items }),
 }));
