@@ -16,6 +16,7 @@ import type {
   TaskPhase,
 } from '../agents/scheduler';
 import { PropositionScheduler } from '../agents/scheduler';
+import type { InterceptionRecord } from '../agents/validator';
 import { useContractStore } from './contract';
 import { useKnowledgeStore } from './knowledge';
 
@@ -37,6 +38,7 @@ interface PropositionState {
   status: RunStatus;
   tasks: PropositionTaskRun[];
   candidates: CandidateRun[];
+  interceptions: InterceptionRecord[];
   draft: PaperDraft | null;
   logs: RunLog[];
   summary: RunSummary | null;
@@ -55,6 +57,7 @@ const INITIAL: Pick<
   | 'status'
   | 'tasks'
   | 'candidates'
+  | 'interceptions'
   | 'draft'
   | 'logs'
   | 'summary'
@@ -64,6 +67,7 @@ const INITIAL: Pick<
   status: '未开始',
   tasks: [],
   candidates: [],
+  interceptions: [],
   draft: null,
   logs: [],
   summary: null,
@@ -128,6 +132,10 @@ export const usePropositionStore = create<PropositionState>((set, get) => ({
           candidates: state.candidates.filter(
             (candidate) => !taskIds.includes(candidate.taskId),
           ),
+          interceptions: state.interceptions.filter(
+            (interception) =>
+              !interception.taskId || !taskIds.includes(interception.taskId),
+          ),
           tasks: state.tasks.map((run) =>
             taskIds.includes(run.task.id)
               ? {
@@ -149,6 +157,14 @@ export const usePropositionStore = create<PropositionState>((set, get) => ({
               (candidate) => candidate.taskId !== taskId,
             ),
             ...records,
+          ],
+          interceptions: [
+            ...state.interceptions.filter(
+              (interception) => interception.taskId !== taskId,
+            ),
+            ...records.flatMap((record) =>
+              record.interception ? [record.interception] : [],
+            ),
           ],
         })),
       onDraft: (draft) => set({ draft }),

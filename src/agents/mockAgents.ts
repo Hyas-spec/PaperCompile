@@ -16,22 +16,18 @@ import type {
   QuestionType,
   ReviewAgentInput,
   ReviewAgentOutput,
-  ThreeStateConclusion,
   TraceL1,
-  ValidationAgentInput,
   ValidationAgentOutput,
-  ValidationGate,
-  ValidationResult,
 } from '../types';
 import {
   CHAPTER_ORDER,
-  MOCK_BLUEPRINT,
   TYPE_ORDER,
   cognitiveOfType,
   expectedDifficultyOfCell,
   requirementOfPoint,
   scoreOfType,
 } from '../pages/propositionData';
+import { runValidator, type ValidatorInput } from './validator';
 
 /* ===== 规划 Agent ===== */
 
@@ -383,194 +379,12 @@ export function reviewAgent(input: ReviewAgentInput): ReviewAgentOutput {
   };
 }
 
-/* ===== 校验 Agent：七道闸门 ===== */
-
-const gate = (
-  name: ValidationGate,
-  conclusion: ThreeStateConclusion,
-  evidence: string[],
-  suggestion?: string,
-): ValidationResult => ({ gate: name, conclusion, evidence, suggestion });
-
-const normalize = (text: string): string =>
-  text.replace(/[\s，。；：、（）()《》“”"'？?！!—\-]/g, '');
-
-const bigrams = (text: string): Set<string> => {
-  const result = new Set<string>();
-  const normalized = normalize(text);
-  for (let index = 0; index < normalized.length - 1; index += 1) {
-    result.add(normalized.slice(index, index + 2));
-  }
-  return result;
-};
-
-const similarity = (left: string, right: string): number => {
-  const a = bigrams(left);
-  const b = bigrams(right);
-  if (a.size === 0 || b.size === 0) return 0;
-  let overlap = 0;
-  a.forEach((token) => {
-    if (b.has(token)) overlap += 1;
-  });
-  return overlap / (a.size + b.size - overlap);
-};
-
-const worstConclusion = (results: ValidationResult[]): ThreeStateConclusion =>
-  results.some((result) => result.conclusion === '拦截')
-    ? '拦截'
-    : results.some((result) => result.conclusion === '需复核')
-      ? '需复核'
-      : '通过';
+/* ===== 校验 Agent：调用 validator 的七道闸门 ===== */
 
 export function validationAgent(
-  input: ValidationAgentInput,
+  input: ValidatorInput,
 ): ValidationAgentOutput {
-  const { question } = input;
-  const point = input.knowledgeBase.find(
-    (candidate) => candidate.id === question.knowledgePointId,
-  );
-  const cell = input.blueprint.cells.find(
-    (candidate) =>
-      candidate.chapter === question.chapter &&
-      candidate.questionType === question.type,
-  );
-
-  const results: ValidationResult[] = [];
-
-  results.push(
-    gate(
-      '覆盖校验',
-      point ? '通过' : '拦截',
-      point
-        ? [
-            `知识点 ${point.id}「${point.name}」已登记且状态为${point.state}。`,
-            `所属章节「${point.chapter}」在教学大纲中可定位。`,
-          ]
-        : [`知识点 ${question.knowledgePointId} 未在知识点库登记。`],
-      point ? undefined : '补登知识点并重新发起命题。',
-    ),
-  );
-
-  results.push(
-    gate(
-      '配比校验',
-      cell ? '通过' : '拦截',
-      cell
-        ? [
-            `题型「${question.type}」匹配蓝图单元格 ${cell.chapter} × ${cell.questionType}。`,
-            `单元格题量 ${cell.questionCount}，分值 ${cell.score} 分。`,
-          ]
-        : [`蓝图缺少「${question.chapter} × ${question.type}」单元格。`],
-      cell ? undefined : '先修订命题蓝图，再重新生成。',
-    ),
-  );
-
-  const levelBand =
-    question.difficulty >= 0.8
-      ? '易（≥0.80）'
-      : question.difficulty >= 0.6
-        ? '中（0.60–0.80）'
-        : '难（<0.60）';
-  results.push(
-    gate(
-      '难度校验',
-      '通过',
-      [
-        `单题难度系数 ${question.difficulty.toFixed(2)}，落在 ${levelBand} 档。`,
-        `蓝图章节期望难度 ${(cell?.difficulty ?? MOCK_BLUEPRINT.difficultyPlan.expected).toFixed(2)}。`,
-      ],
-    ),
-  );
-
-  const labels = new Set(question.options?.map((option) => option.label));
-  const scoringTotal = question.scoringPoints.reduce(
-    (total, item) => total + item.score,
-    0,
-  );
-  const correctnessOk =
-    question.answer.trim().length > 0 &&
-    question.analysis.trim().length > 0 &&
-    (question.type !== '单项选择题' ||
-      (question.options?.length === 4 && labels.size === 4));
-  results.push(
-    gate(
-      '正确性校验',
-      correctnessOk ? '通过' : '拦截',
-      correctnessOk
-        ? [
-            `答案 ${question.answer} 可独立复算。`,
-            `解析与评分点自洽，评分点合计 ${scoringTotal} 分。`,
-          ]
-        : ['答案、解析或选项结构不完整，无法复算。'],
-      correctnessOk ? undefined : '补齐答案与解析后重新生成。',
-    ),
-  );
-
-  const scanText = [
-    question.stem,
-    question.options?.map((option) => option.content).join(' ') ?? '',
-    question.answer,
-    question.analysis,
-  ].join(' ');
-  const outOfScope = input.knowledgeBase.filter(
-    (candidate) => candidate.outOfScope && scanText.includes(candidate.name),
-  );
-  results.push(
-    gate(
-      '超纲校验',
-      outOfScope.length > 0 ? '拦截' : '通过',
-      outOfScope.length > 0
-        ? outOfScope.flatMap((candidate) => [
-            `命中超纲概念「${candidate.name}」（知识点 ID: ${candidate.id}），已在知识点库标记超纲禁区。`,
-            `原文来源：${candidate.sourceAnchors[0]?.anchor ?? '知识点库'}。`,
-          ])
-        : ['题干、选项、答案与解析均未命中超纲禁区概念。'],
-      outOfScope.length > 0
-        ? '删除超纲概念，或先在知识点库登记并通过大纲校验。'
-        : undefined,
-    ),
-  );
-
-  const highest = input.historyBank.reduce(
-    (best, history) => Math.max(best, similarity(question.stem, history.stem)),
-    0,
-  );
-  results.push(
-    gate(
-      '重复校验',
-      highest >= 0.92 ? '拦截' : highest >= 0.82 ? '需复核' : '通过',
-      [
-        `与历史题库 ${input.historyBank.length} 题的最高题干相似度 ${highest.toFixed(2)}。`,
-        '阈值：≥0.92 拦截；≥0.82 提示改写。',
-      ],
-      highest >= 0.82 ? '改写题干与选项，降低与历史题的相似度。' : undefined,
-    ),
-  );
-
-  const structureOk =
-    (question.type !== '单项选择题' || question.options?.length === 4) &&
-    (question.type !== '填空题' || question.stem.includes('______')) &&
-    (question.type === '单项选择题' || question.scoringPoints.length > 0);
-  const formatOk =
-    structureOk && Math.abs(scoringTotal - question.score) < 1e-9;
-  results.push(
-    gate(
-      '格式校验',
-      formatOk ? '通过' : '拦截',
-      formatOk
-        ? [
-            `题型结构符合「${question.type}」模板。`,
-            `评分点合计 ${scoringTotal} 分，与题目分值 ${question.score} 分一致。`,
-          ]
-        : ['题型结构、答题空间或分值合计不符合模板。'],
-      formatOk ? undefined : '按题型模板补齐结构并核对分值合计。',
-    ),
-  );
-
-  return {
-    overall: worstConclusion(results),
-    results,
-  };
+  return runValidator(input).report;
 }
 
 /* ===== 仲裁 Agent ===== */

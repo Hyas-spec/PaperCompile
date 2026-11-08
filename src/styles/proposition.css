@@ -962,6 +962,17 @@
   line-height: 1.55;
 }
 
+.proposition-interception {
+  margin: 5px 0 0;
+  padding: 4px 7px;
+  border-left: 2px solid var(--pc-block);
+  background: var(--pc-block-soft);
+  color: var(--pc-block);
+  font-family: var(--pc-font-body);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
 /* ===== 详情卡片 ===== */
 
 .proposition-card {

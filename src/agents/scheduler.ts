@@ -37,6 +37,10 @@ import {
   type MockPlanningInput,
   type MockPropositionInput,
 } from './mockAgents';
+import {
+  toValidationDecision,
+  type InterceptionRecord,
+} from './validator';
 
 export type RunStatus =
   | '未开始'
@@ -78,6 +82,7 @@ export interface CandidateRun {
   review: ReviewAgentOutput;
   validation: ValidationReport;
   arbitration?: ArbitrationAgentOutput;
+  interception?: InterceptionRecord;
   finalConclusion: ThreeStateConclusion;
   finalReason: string;
 }
@@ -414,8 +419,15 @@ export class PropositionScheduler {
 
     this.hooks.onTaskUpdate(task.id, { status: '校验' });
     const validations: ValidationReport[] = [];
+    const interceptions = new Map<string, InterceptionRecord>();
     for (const item of generated) {
       await delay(45);
+      const samePaper = [...this.records.values()]
+        .flat()
+        .map((record) => record.candidate)
+        .filter(
+          (candidate) => candidate.questionNo !== item.candidate.questionNo,
+        );
       const validationInput = {
         question: item.candidate,
         blueprint: this.context.blueprint,
@@ -423,6 +435,7 @@ export class PropositionScheduler {
         syllabus: this.context.syllabus,
         knowledgeBase: this.context.knowledgeBase,
         historyBank: this.context.historyBank,
+        samePaper,
       };
       validateValidationInput(validationInput);
       const validation = await this.invoke(
@@ -431,6 +444,13 @@ export class PropositionScheduler {
         validateValidationOutput,
       );
       validations.push(validation);
+      const decision = toValidationDecision(validation, item.candidate);
+      if (decision.interception) {
+        interceptions.set(item.candidate.questionNo, {
+          ...decision.interception,
+          taskId: task.id,
+        });
+      }
       if (validation.overall !== '通过') {
         const gate = validation.results.find(
           (result) => result.conclusion === validation.overall,
@@ -500,6 +520,7 @@ export class PropositionScheduler {
         review,
         validation,
         arbitration,
+        interception: interceptions.get(item.candidate.questionNo),
         finalConclusion: final.conclusion,
         finalReason: final.reason,
       };

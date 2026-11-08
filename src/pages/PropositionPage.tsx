@@ -146,6 +146,13 @@ function CandidateDetail({ record }: { record: CandidateRun }) {
         <p>{record.finalReason}</p>
       </div>
 
+      {record.interception && (
+        <p className="proposition-interception">
+          拦截记录：{record.interception.gate} ·{' '}
+          {record.interception.evidence[0]}
+        </p>
+      )}
+
       <section className="proposition-card">
         <div className="proposition-card-head">
           <h3>题目</h3>
@@ -306,6 +313,7 @@ export default function PropositionPage() {
   const status = usePropositionStore((state) => state.status);
   const tasks = usePropositionStore((state) => state.tasks);
   const candidates = usePropositionStore((state) => state.candidates);
+  const interceptions = usePropositionStore((state) => state.interceptions);
   const draft = usePropositionStore((state) => state.draft);
   const logs = usePropositionStore((state) => state.logs);
   const selectedTaskId = usePropositionStore((state) => state.selectedTaskId);
@@ -360,9 +368,7 @@ export default function PropositionPage() {
   const reviewNeeds = candidates.filter(
     (candidate) => candidate.review.conclusion !== '通过',
   ).length;
-  const blocked = candidates.filter(
-    (candidate) => candidate.validation.overall === '拦截',
-  ).length;
+  const blocked = interceptions.length;
   const poolCount = candidates.length - blocked;
   const escalated = candidates.filter(
     (candidate) => candidate.arbitration?.escalatedToHuman,
