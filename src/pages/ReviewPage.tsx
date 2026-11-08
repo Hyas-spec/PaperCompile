@@ -26,8 +26,11 @@ import { useContractStore } from '../store/contract';
 import { useKnowledgeStore } from '../store/knowledge';
 import {
   buildPropositionContext,
+  roleOfType,
   type PropositionContext,
 } from './propositionData';
+import PageHeader from '../components/PageHeader';
+import Collapsible from '../components/Collapsible';
 import '../styles/review.css';
 
 type ReviewTrace = Omit<QuestionTrace, 'L7'> & { L7?: TraceL7 };
@@ -88,8 +91,9 @@ const formatTime = (iso: string): string =>
   });
 
 const answerLineCount = (question: CandidateQuestion): number => {
-  if (question.type === '填空题') return 2;
-  if (question.type === '算法设计与分析题') return 9;
+  const role = roleOfType(question.type);
+  if (role === 'fill') return 2;
+  if (role === 'algorithm') return 9;
   return 4;
 };
 
@@ -583,7 +587,7 @@ export default function ReviewPage() {
               <span>作答区</span>
               <small>学生卷预留，不在本页填写</small>
             </div>
-            {selected.candidate.type === '单项选择题' ? (
+            {roleOfType(selected.candidate.type) === 'choice' ? (
               <div className="review-choice-area">
                 {['A', 'B', 'C', 'D'].map((label) => (
                   <span key={label}>{label}</span>
@@ -676,11 +680,11 @@ export default function ReviewPage() {
           </p>
         </section>
 
-        <section className="review-card">
-          <div className="review-card-head">
-            <h3>命题说明</h3>
-            <span>不参与审题</span>
-          </div>
+        <Collapsible
+          title="命题说明"
+          summary="审题 Agent 不读取 · 仅供教师参考"
+          className="review-card"
+        >
           <dl className="review-note-list">
             <div><dt>考查意图</dt><dd>{selected.candidate.propositionNote.intent}</dd></div>
             <div><dt>难度依据</dt><dd>{selected.candidate.propositionNote.difficultyBasis}</dd></div>
@@ -689,7 +693,7 @@ export default function ReviewPage() {
             )}
             <div><dt>常见错误预判</dt><dd>{selected.candidate.propositionNote.commonErrors}</dd></div>
           </dl>
-        </section>
+        </Collapsible>
 
         <section className="review-card">
           <div className="review-card-head">
@@ -728,10 +732,17 @@ export default function ReviewPage() {
 
   return (
     <section className="page review-page">
-      <header className="page-header">
-        <h1>题目审查台</h1>
-        <p className="page-duty">逐题终审</p>
-      </header>
+      <PageHeader
+        step={6}
+        title="题目审查台"
+        duty="教师逐题终审"
+        goal="逐题终审候选题：通过、改写、换题或退回；左锚点、中题目、右证据在同一屏内完成判断。"
+        next={{
+          label: '成卷与导出',
+          to: '/compose',
+          hint: '全部题目审完后调整题序并签发',
+        }}
+      />
 
       <div className="page-panel review-panel">
         <div className="review-toolbar">

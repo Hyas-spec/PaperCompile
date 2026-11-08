@@ -1,125 +1,24 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { usePaperStore } from '../store';
+import {
+  CHAPTER_DEFS,
+  MOCK_BLUEPRINT,
+  QUESTION_TYPE_DEFS,
+} from './propositionData';
+import { COURSE_PACK } from '../courses/active';
+import { COGNITIVE_LEVELS } from '../courses/coursePack';
+import type { CourseChapterRuntime } from '../courses/types';
+import PageHeader from '../components/PageHeader';
 import '../styles/blueprint.css';
 
-const TYPES = [
-  { key: 'choice', label: '单项选择题', short: '单选', score: 2, targetCount: 15 },
-  { key: 'fill', label: '填空题', short: '填空', score: 2, targetCount: 5 },
-  { key: 'short', label: '简答与分析题', short: '简答', score: 5, targetCount: 4 },
-  { key: 'algorithm', label: '算法设计与分析题', short: '算法', score: 20, targetCount: 2 },
-] as const;
+const TYPES = QUESTION_TYPE_DEFS;
 
-type TypeKey = (typeof TYPES)[number]['key'];
+type TypeKey = string;
 
-const COGNITIVE_LEVELS = ['记忆', '理解', '应用', '分析', '综合'] as const;
+type ChapterDef = CourseChapterRuntime;
 
-interface ChapterDef {
-  id: string;
-  no: number;
-  title: string;
-  hours: number;
-  knowledgePoints: number;
-  targetScore: number;
-  expectedDifficulty: number;
-  targetCounts: Record<TypeKey, number>;
-  cognitiveMix: number[];
-}
-
-/**
- * 章节、学时、知识点、目标分值与期望难度对齐项目说明书表 B-1。
- * 认知层次按章节知识点认知层次估算，用于三维配比中的认知层次视图。
- */
-const CHAPTERS: ChapterDef[] = [
-  {
-    id: 'ch01',
-    no: 1,
-    title: '绪论',
-    hours: 4,
-    knowledgePoints: 4,
-    targetScore: 6,
-    expectedDifficulty: 0.85,
-    targetCounts: { choice: 2, fill: 1, short: 0, algorithm: 0 },
-    cognitiveMix: [0.4, 0.4, 0.2, 0, 0],
-  },
-  {
-    id: 'ch02',
-    no: 2,
-    title: '线性表',
-    hours: 8,
-    knowledgePoints: 7,
-    targetScore: 8,
-    expectedDifficulty: 0.78,
-    targetCounts: { choice: 3, fill: 1, short: 0, algorithm: 0 },
-    cognitiveMix: [0.15, 0.45, 0.4, 0, 0],
-  },
-  {
-    id: 'ch03',
-    no: 3,
-    title: '栈与队列',
-    hours: 6,
-    knowledgePoints: 5,
-    targetScore: 11,
-    expectedDifficulty: 0.75,
-    targetCounts: { choice: 2, fill: 1, short: 1, algorithm: 0 },
-    cognitiveMix: [0.1, 0.4, 0.5, 0, 0],
-  },
-  {
-    id: 'ch04',
-    no: 4,
-    title: '串',
-    hours: 4,
-    knowledgePoints: 3,
-    targetScore: 7,
-    expectedDifficulty: 0.8,
-    targetCounts: { choice: 1, fill: 0, short: 1, algorithm: 0 },
-    cognitiveMix: [0.1, 0.4, 0.4, 0.1, 0],
-  },
-  {
-    id: 'ch05',
-    no: 5,
-    title: '树与二叉树',
-    hours: 10,
-    knowledgePoints: 8,
-    targetScore: 28,
-    expectedDifficulty: 0.62,
-    targetCounts: { choice: 3, fill: 1, short: 0, algorithm: 1 },
-    cognitiveMix: [0, 0.3, 0.4, 0.3, 0],
-  },
-  {
-    id: 'ch06',
-    no: 6,
-    title: '图',
-    hours: 10,
-    knowledgePoints: 7,
-    targetScore: 26,
-    expectedDifficulty: 0.6,
-    targetCounts: { choice: 2, fill: 1, short: 0, algorithm: 1 },
-    cognitiveMix: [0, 0.3, 0.4, 0.3, 0],
-  },
-  {
-    id: 'ch07',
-    no: 7,
-    title: '查找',
-    hours: 6,
-    knowledgePoints: 4,
-    targetScore: 7,
-    expectedDifficulty: 0.72,
-    targetCounts: { choice: 1, fill: 0, short: 1, algorithm: 0 },
-    cognitiveMix: [0.1, 0.4, 0.3, 0.2, 0],
-  },
-  {
-    id: 'ch08',
-    no: 8,
-    title: '排序',
-    hours: 8,
-    knowledgePoints: 4,
-    targetScore: 7,
-    expectedDifficulty: 0.7,
-    targetCounts: { choice: 1, fill: 0, short: 1, algorithm: 0 },
-    cognitiveMix: [0, 0.3, 0.4, 0.3, 0],
-  },
-];
+const CHAPTERS: ChapterDef[] = CHAPTER_DEFS;
 
 type Matrix = Record<string, Record<TypeKey, number>>;
 
@@ -146,9 +45,11 @@ const TARGET_TOTAL_COUNT = TYPES.reduce(
   0,
 );
 
-const DIFFICULTY_TARGET = 0.65;
-const DIFFICULTY_BAND = 0.05;
-const RATIO_BAND = 3;
+const DIFFICULTY_TARGET = MOCK_BLUEPRINT.difficultyPlan.expected;
+const DIFFICULTY_BAND = MOCK_BLUEPRINT.difficultyPlan.tolerance;
+const RATIO_BAND = COURSE_PACK.template.ratioBand;
+const COVERAGE_TARGET = MOCK_BLUEPRINT.coverageTarget.minRate;
+const MIN_PER_CHAPTER = MOCK_BLUEPRINT.coverageTarget.minPerChapter;
 
 const formatDeviation = (value: number): string => {
   if (Math.abs(value) < 0.05) return '0.0%';
@@ -212,7 +113,7 @@ export default function BlueprintPage() {
     );
     const actualShare = share(score, totalScore);
     const targetScore = type.targetCount * type.score;
-    const targetShare = targetScore;
+    const targetShare = share(targetScore, TARGET_TOTAL_SCORE);
     return {
       ...type,
       count,
@@ -228,8 +129,9 @@ export default function BlueprintPage() {
     const count = chapterCount(chapter.id);
     const score = chapterScore(chapter.id);
     const actualShare = share(score, totalScore);
-    const deviation = actualShare - chapter.targetScore;
-    return { ...chapter, count, score, actualShare, deviation };
+    const targetShare = share(chapter.targetScore, TARGET_TOTAL_SCORE);
+    const deviation = actualShare - targetShare;
+    return { ...chapter, count, score, actualShare, targetShare, deviation };
   });
 
   const targetCognitiveScores = COGNITIVE_LEVELS.map((_, index) =>
@@ -293,7 +195,9 @@ export default function BlueprintPage() {
 
   const emptyChapters = chapterRows.filter((row) => row.count === 0);
   const scorePass = Math.abs(totalScore - TARGET_TOTAL_SCORE) < 0.01;
-  const coveragePass = coverage >= 90 && emptyChapters.length === 0;
+  const coveragePass =
+    coverage >= COVERAGE_TARGET &&
+    chapterRows.every((row) => row.count >= MIN_PER_CHAPTER);
   const deviationPass = threeDimensionalDeviation <= RATIO_BAND;
   const displayedDifficulty = Number(weightedDifficulty.toFixed(2));
   const difficultyPass =
@@ -324,9 +228,9 @@ export default function BlueprintPage() {
     const difference = totalScore - TARGET_TOTAL_SCORE;
     suggestions.push({
       tone: 'block',
-      text: `当前总分 ${totalScore} 分，满分 100 分，${
+      text: `当前总分 ${totalScore} 分，目标满分 ${TARGET_TOTAL_SCORE} 分，${
         difference > 0 ? `超出 ${difference}` : `少 ${Math.abs(difference)}`
-      } 分；先调整题量使总分回到 100 分。`,
+      } 分；先调整题量使总分回到目标满分。`,
     });
   }
 
@@ -334,19 +238,19 @@ export default function BlueprintPage() {
     suggestions.push({
       tone: 'block',
       text:
-        coverage < 90
-          ? `知识点覆盖率 ${coverage.toFixed(1)}%，低于 90%；${
+        coverage < COVERAGE_TARGET
+          ? `知识点覆盖率 ${coverage.toFixed(1)}%，低于 ${COVERAGE_TARGET}%；${
               emptyChapters.length > 0
                 ? `建议在${emptyChapters
                     .map((row) => `「${row.title}」`)
                     .join('、')}补充题目，`
                 : ''
-            }并确保每章至少命中 1 题。`
+            }并确保每章至少命中 ${MIN_PER_CHAPTER} 题。`
           : `知识点覆盖率 ${coverage.toFixed(
               1,
-            )}% 已达到 90%，但${emptyChapters
+            )}% 已达到 ${COVERAGE_TARGET}%，但${emptyChapters
               .map((row) => `「${row.title}」`)
-              .join('、')}仍无题目；需确保每章至少命中 1 题。`,
+              .join('、')}仍无题目；需确保每章至少命中 ${MIN_PER_CHAPTER} 题。`,
     });
   }
 
@@ -376,7 +280,7 @@ export default function BlueprintPage() {
         worstChapter.targetScore
       } 分，偏差 ${formatDeviation(
         worstChapter.deviation,
-      )}；建议调整该章题量或题型结构，使分值回到 ±3% 带宽内。`,
+      )}；建议调整该章题量或题型结构，使分值回到 ±${RATIO_BAND}% 带宽内。`,
     });
   }
 
@@ -400,17 +304,17 @@ export default function BlueprintPage() {
         displayedDifficulty > DIFFICULTY_TARGET + DIFFICULTY_BAND
           ? `整卷期望难度 ${displayedDifficulty.toFixed(
               2,
-            )}，高于目标 0.65±0.05，整卷偏易；建议降低高得分率章节的分值。`
+            )}，高于目标 ${DIFFICULTY_TARGET.toFixed(2)}±${DIFFICULTY_BAND.toFixed(2)}，整卷偏易；建议降低高得分率章节的分值。`
           : `整卷期望难度 ${displayedDifficulty.toFixed(
               2,
-            )}，低于目标 0.65±0.05，整卷偏难；建议增加基础题或调整章节分值。`,
+            )}，低于目标 ${DIFFICULTY_TARGET.toFixed(2)}±${DIFFICULTY_BAND.toFixed(2)}，整卷偏难；建议增加基础题或调整章节分值。`,
     });
   }
 
   if (suggestions.length === 0) {
     suggestions.push({
       tone: 'pass',
-      text: `当前蓝图总分 100 分，覆盖率 ${coverage.toFixed(
+      text: `当前蓝图总分 ${totalScore} 分，覆盖率 ${coverage.toFixed(
         1,
       )}%，三维配比偏差 ${threeDimensionalDeviation.toFixed(
         1,
@@ -420,7 +324,9 @@ export default function BlueprintPage() {
 
   suggestions.push({
     tone: 'hint',
-    text: `目标结构：单选 ${TYPES[0].targetCount} 题、填空 ${TYPES[1].targetCount} 题、简答 ${TYPES[2].targetCount} 题、算法 ${TYPES[3].targetCount} 题，共 ${TARGET_TOTAL_COUNT} 题 / 100 分。`,
+    text: `目标结构：${TYPES.map(
+      (type) => `${type.short} ${type.targetCount} 题`,
+    ).join('、')}，共 ${TARGET_TOTAL_COUNT} 题 / ${TARGET_TOTAL_SCORE} 分。`,
   });
 
   const updateCell = (chapterId: string, key: TypeKey, raw: string) => {
@@ -458,10 +364,17 @@ export default function BlueprintPage() {
 
   return (
     <section className="page blueprint-page">
-      <header className="page-header">
-        <h1>蓝图看板</h1>
-        <p className="page-duty">分配题型、分值与难度</p>
-      </header>
+      <PageHeader
+        step={3}
+        title="蓝图看板"
+        duty="配置章节 × 题型 × 分值 × 难度"
+        goal="为当前课程配置章节 × 题型 × 分值 × 难度，实时查看覆盖率、三维配比偏差与整卷期望难度。"
+        next={{
+          label: '命题契约编辑器',
+          to: '/contract',
+          hint: '蓝图校验达标后，把约束写成可校验条款',
+        }}
+      />
 
       <div className="page-panel blueprint-panel">
         <div className="blueprint-toolbar">
@@ -470,12 +383,13 @@ export default function BlueprintPage() {
               命题蓝图 <strong>v1</strong>
             </span>
             <span className="blueprint-meta">
-              《数据结构》期中考试 · 满分 100 分 · 120 分钟
+              《{COURSE_PACK.template.name}》{COURSE_PACK.template.examName} · 满分{' '}
+              {TARGET_TOTAL_SCORE} 分 · {MOCK_BLUEPRINT.durationMinutes} 分钟
             </span>
             <span
               className={`blueprint-score${scorePass ? '' : ' is-block'}`}
             >
-              总分 {totalScore} / 100
+              总分 {totalScore} / {TARGET_TOTAL_SCORE}
             </span>
           </div>
 
@@ -539,7 +453,7 @@ export default function BlueprintPage() {
             <strong className="blueprint-kpi-value">
               {threeDimensionalDeviation.toFixed(1)}%
             </strong>
-            <p>带宽 ±3% · 题型 / 章节 / 认知层次</p>
+            <p>带宽 ±{RATIO_BAND}% · 题型 / 章节 / 认知层次</p>
           </div>
 
           <div
@@ -556,7 +470,9 @@ export default function BlueprintPage() {
             <strong className="blueprint-kpi-value">
               {weightedDifficulty.toFixed(2)}
             </strong>
-            <p>目标 0.65 ± 0.05</p>
+            <p>
+              目标 {DIFFICULTY_TARGET.toFixed(2)} ± {DIFFICULTY_BAND.toFixed(2)}
+            </p>
           </div>
         </div>
 
@@ -614,7 +530,9 @@ export default function BlueprintPage() {
                 <h2>章节 × 题型矩阵</h2>
                 <p>单元格为题数；题型分值固定，实时汇总总分。</p>
               </div>
-              <span>目标 {TARGET_TOTAL_COUNT} 题 / 100 分</span>
+              <span>
+                目标 {TARGET_TOTAL_COUNT} 题 / {TARGET_TOTAL_SCORE} 分
+              </span>
             </div>
 
             <div className="blueprint-table-wrap">
@@ -703,7 +621,7 @@ export default function BlueprintPage() {
             <div className="blueprint-side-block">
               <div className="blueprint-side-head">
                 <h2>三维配比</h2>
-                <span>带宽 ±3%</span>
+                <span>带宽 ±{RATIO_BAND}%</span>
               </div>
 
               <div className="blueprint-deviation-list">
@@ -745,30 +663,32 @@ export default function BlueprintPage() {
               </div>
 
               <div className="blueprint-difficulty-bars">
-                {[
-                  { label: '易 ≥0.80', value: 30 },
-                  { label: '中 0.60–0.80', value: 50 },
-                  { label: '难 <0.60', value: 20 },
-                ].map((item, index) => (
-                  <div className="blueprint-difficulty-row" key={item.label}>
+                {COURSE_PACK.difficultyBands.map((band, index) => (
+                  <div className="blueprint-difficulty-row" key={band.level}>
                     <span className="blueprint-difficulty-label">
-                      {item.label}
+                      {band.level}{' '}
+                      {band.level === '易'
+                        ? `≥${band.min.toFixed(2)}`
+                        : band.level === '中'
+                          ? `${band.min.toFixed(2)}–${band.max.toFixed(2)}`
+                          : `<${band.max.toFixed(2)}`}
                     </span>
                     <span className="blueprint-difficulty-track">
                       <span
                         className={`blueprint-difficulty-fill level-${index}`}
-                        style={{ width: `${item.value}%` }}
+                        style={{ width: `${band.scoreRatio}%` }}
                       />
                     </span>
                     <span className="blueprint-difficulty-value">
-                      {item.value}%
+                      {band.scoreRatio}%
                     </span>
                   </div>
                 ))}
               </div>
 
               <div className="blueprint-difficulty-target">
-                整卷目标 0.65 ± 0.05
+                整卷目标 {DIFFICULTY_TARGET.toFixed(2)} ±{' '}
+                {DIFFICULTY_BAND.toFixed(2)}
               </div>
             </div>
           </aside>

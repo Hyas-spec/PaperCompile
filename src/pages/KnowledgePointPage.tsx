@@ -7,6 +7,8 @@ import {
   type KnowledgePointItem,
 } from '../store/knowledge';
 import type { CognitiveLevel } from '../types';
+import { COURSE_PACK } from '../courses/active';
+import PageHeader from '../components/PageHeader';
 import '../styles/knowledge.css';
 
 interface PointForm {
@@ -22,29 +24,16 @@ type Drawer = 'history' | 'audit' | null;
 
 const CHAPTERS = MOCK_OUTLINE.chapters;
 
-const CHAPTER_WEIGHTS: Record<number, number> = {
-  1: 40,
-  2: 60,
-  3: 60,
-  4: 50,
-  5: 80,
-  6: 80,
-  7: 50,
-  8: 50,
-};
+const CHAPTER_NO_BY_TITLE = new Map(
+  MOCK_OUTLINE.chapters.map((chapter) => [chapter.title, chapter.no]),
+);
 
-const KEY_POINT_PATTERN = /(遍历|最短路径|关键路径|哈夫曼|KMP|B 树|排序)/;
-const OUT_OF_SCOPE_NAMES = new Set(['线索二叉树', 'B 树']);
+const CHAPTER_ID_BY_TITLE = new Map(
+  MOCK_OUTLINE.chapters.map((chapter) => [chapter.title, chapter.id]),
+);
 
 const formatTime = (time: string) =>
   new Date(time).toLocaleString('zh-CN', { hour12: false });
-
-const initialCognitiveLevel = (name: string): CognitiveLevel => {
-  if (/(基本概念|定义|术语)/.test(name)) return '记忆';
-  if (/(复杂度|算法特性|比较)/.test(name)) return '分析';
-  if (KEY_POINT_PATTERN.test(name)) return '应用';
-  return '理解';
-};
 
 const formFromPoint = (point: KnowledgePointItem): PointForm => ({
   name: point.name,
@@ -67,99 +56,67 @@ const emptyForm = (chapterId?: string): PointForm => {
   };
 };
 
-/** 从大纲草稿或内置演示数据建立知识点基线 v1。 */
+/**
+ * 从当前课程知识点库建立基线；若大纲页已生成草稿，则以教师采纳的候选为准，
+ * 并用课程知识点库补齐权重、认知层次、超纲禁区与先修关系。
+ */
 function buildInitialPoints(): KnowledgePointItem[] {
   const draft = usePaperStore.getState().knowledgeDraft;
   const draftPoints = (draft ?? []).filter((item) => !item.empty);
-  const useDraft = draftPoints.length > 0;
+  const libraryById = new Map(COURSE_PACK.knowledge.map((point) => [point.id, point]));
+  const libraryByName = new Map(
+    COURSE_PACK.knowledge.map((point) => [`${point.chapter}::${point.name}`, point]),
+  );
 
-  const source = useDraft
-    ? draftPoints.map((item) => ({
-        id: item.id,
-        name: item.name,
-        chapterId: item.chapterId,
-        chapter: item.chapter,
-        chapterNo: item.chapterNo,
-        anchor: item.anchor,
-        excerpt: item.excerpt,
-      }))
-    : MOCK_OUTLINE.candidates
-        .filter((item) => !item.empty)
-        .map((item) => ({
+  const source = draftPoints.length > 0
+    ? draftPoints.map((item) => {
+        const library =
+          libraryById.get(item.id) ?? libraryByName.get(`${item.chapter}::${item.name}`);
+        return {
           id: item.id,
-          name: item.name,
-          chapterId: item.chapterId,
+          name: library?.name ?? item.name,
           chapter: item.chapter,
+          chapterId: item.chapterId,
           chapterNo: item.chapterNo,
-          anchor: item.paragraph.label,
-          excerpt: item.paragraph.text,
-        }));
+          weight: library?.weight ?? 60,
+          cognitiveLevel: library?.cognitiveLevel ?? '理解',
+          prerequisites: library ? [...library.prerequisites] : [],
+          outOfScope: library?.outOfScope ?? false,
+          anchor: item.anchor,
+          excerpt: item.excerpt,
+        };
+      })
+    : COURSE_PACK.knowledge.map((point) => ({
+        id: point.id,
+        name: point.name,
+        chapter: point.chapter,
+        chapterId:
+          CHAPTER_ID_BY_TITLE.get(point.chapter) ??
+          MOCK_OUTLINE.chapters[0]?.id ??
+          'ch-01',
+        chapterNo: CHAPTER_NO_BY_TITLE.get(point.chapter) ?? 1,
+        weight: point.weight,
+        cognitiveLevel: point.cognitiveLevel,
+        prerequisites: [...point.prerequisites],
+        outOfScope: point.outOfScope,
+        anchor: point.sourceAnchors[0]?.anchor ?? '—',
+        excerpt: point.sourceAnchors[0]?.excerpt ?? '—',
+      }));
 
-  const points: KnowledgePointItem[] = source.map((item) => ({
+  return source.map((item) => ({
     id: item.id,
     name: item.name,
     chapterId: item.chapterId,
     chapter: item.chapter,
     chapterNo: item.chapterNo,
     parentId: null,
-    weight: Math.min(
-      100,
-      (CHAPTER_WEIGHTS[item.chapterNo] ?? 50) +
-        (KEY_POINT_PATTERN.test(item.name) ? 10 : 0),
-    ),
-    cognitiveLevel: initialCognitiveLevel(item.name),
-    prerequisites: [],
-    outOfScope: OUT_OF_SCOPE_NAMES.has(item.name),
+    weight: item.weight,
+    cognitiveLevel: item.cognitiveLevel,
+    prerequisites: item.prerequisites,
+    outOfScope: item.outOfScope,
     state: '确立',
     sourceAnchors: [{ anchor: item.anchor, excerpt: item.excerpt }],
   }));
-
-  const byChapter = new Map<number, KnowledgePointItem[]>();
-  points.forEach((point) => {
-    const list = byChapter.get(point.chapterNo) ?? [];
-    list.push(point);
-    byChapter.set(point.chapterNo, list);
-  });
-
-  let previousFirst: KnowledgePointItem | undefined;
-  [...byChapter.keys()]
-    .sort((a, b) => a - b)
-    .forEach((chapterNo) => {
-      const chapterPoints = byChapter.get(chapterNo) ?? [];
-      const first = chapterPoints[0];
-      if (!first) return;
-
-      chapterPoints.forEach((point, index) => {
-        point.prerequisites =
-          index === 0
-            ? previousFirst
-              ? [previousFirst.id]
-              : []
-            : [first.id];
-      });
-      previousFirst = first;
-    });
-
-  // 演示数据：保留一条跨章先修，供层次倒挂提示。
-  const treeTraversal = points.find((point) => point.name === '二叉树的遍历');
-  const graphTraversal = points.find((point) => point.name === '图的遍历');
-  if (treeTraversal && graphTraversal) {
-    treeTraversal.prerequisites = [
-      ...new Set([...treeTraversal.prerequisites, graphTraversal.id]),
-    ];
-  }
-
-  // 演示数据：关键路径保留为孤立节点，供孤立节点提示。
-  const keyPath = points.find((point) => point.name === '关键路径');
-  if (keyPath) keyPath.prerequisites = [];
-
-  // 演示数据：制造同名知识点，供同名合并提示。
-  const reconstructed = points.find(
-    (point) => point.name === '由遍历序列重构二叉树',
-  );
-  if (reconstructed) reconstructed.name = '二叉树的遍历';
-
-  return points;
 }
 
 export default function KnowledgePointPage() {
@@ -564,10 +521,17 @@ export default function KnowledgePointPage() {
 
   return (
     <section className="page knowledge-page">
-      <header className="page-header">
-        <h1>知识点工作台</h1>
-        <p className="page-duty">维护知识点图</p>
-      </header>
+      <PageHeader
+        step={2}
+        title="知识点工作台"
+        duty="审定知识点基线"
+        goal="逐条审定当前课程的知识点基线：编辑权重、认知层次、超纲禁区与先修关系，确认后保存为可追溯的基线版本。"
+        next={{
+          label: '蓝图看板',
+          to: '/blueprint',
+          hint: '保存基线后配置章节 × 题型 × 分值 × 难度',
+        }}
+      />
 
       <div className="page-panel knowledge-panel">
         <div className="knowledge-toolbar">

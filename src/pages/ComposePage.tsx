@@ -16,33 +16,29 @@ import {
   DEMO_USER,
 } from '../store/session';
 import { resolveFinalQuestions } from './finalPaper';
+import { COURSE_PACK } from '../courses/active';
+import { roleOfType } from './propositionData';
+import PageHeader from '../components/PageHeader';
+import Collapsible from '../components/Collapsible';
 import '../styles/compose.css';
 
 type PaperView = 'student' | 'teacher';
 
-const QUESTION_TYPES: QuestionType[] = [
-  '单项选择题',
-  '填空题',
-  '简答与分析题',
-  '算法设计与分析题',
-];
+const QUESTION_TYPES: QuestionType[] = COURSE_PACK.questionTypes.map((type) => type.label);
 
-const TYPE_MARKS = ['一', '二', '三', '四'];
+const TYPE_MARKS = ['一', '二', '三', '四', '五', '六', '七', '八'];
 
 const PAPER = {
-  title: '《数据结构》期中考试试卷',
-  course: '数据结构',
-  examName: '期中考试',
-  paperNo: 'PC-DS-MID-001',
+  title: `《${COURSE_PACK.template.name}》${COURSE_PACK.template.examName}试卷`,
+  course: COURSE_PACK.template.name,
+  examName: COURSE_PACK.template.examName,
+  paperNo: COURSE_PACK.paperId,
   teacher: '李老师',
 };
 
-const FALLBACK_MINUTES: Record<QuestionType, number> = {
-  单项选择题: 30,
-  填空题: 10,
-  简答与分析题: 30,
-  算法设计与分析题: 50,
-};
+const FALLBACK_MINUTES: Record<string, number> = Object.fromEntries(
+  COURSE_PACK.questionTypes.map((type) => [type.label, type.minutes]),
+);
 
 const FIRST_PAGE_BUDGET = 640;
 const PAGE_BUDGET = 930;
@@ -64,30 +60,34 @@ const textHeight = (text: string, charsPerLine = 38): number =>
   Math.ceil(text.length / charsPerLine) * 9;
 
 const questionHeight = (question: CandidateQuestion, view: PaperView): number => {
-  const base: Record<QuestionType, number> = {
-    单项选择题: 48,
-    填空题: 45,
-    简答与分析题: 66,
-    算法设计与分析题: 76,
+  const role = roleOfType(question.type);
+  const base: Record<string, number> = {
+    choice: 48,
+    fill: 45,
+    short: 66,
+    algorithm: 76,
+    other: 60,
   };
-  const studentExtra: Record<QuestionType, number> = {
-    单项选择题: 0,
-    填空题: 54,
-    简答与分析题: 112,
-    算法设计与分析题: 238,
+  const studentExtra: Record<string, number> = {
+    choice: 0,
+    fill: 54,
+    short: 112,
+    algorithm: 238,
+    other: 96,
   };
-  const teacherExtra: Record<QuestionType, number> = {
-    单项选择题: 176,
-    填空题: 196,
-    简答与分析题: 246,
-    算法设计与分析题: 338,
+  const teacherExtra: Record<string, number> = {
+    choice: 176,
+    fill: 196,
+    short: 246,
+    algorithm: 338,
+    other: 220,
   };
   const optionsHeight = question.options?.length ? 54 : 0;
   return (
-    base[question.type] +
+    base[role] +
     textHeight(question.stem) +
     optionsHeight +
-    (view === 'student' ? studentExtra[question.type] : teacherExtra[question.type]) +
+    (view === 'student' ? studentExtra[role] : teacherExtra[role]) +
     8
   );
 };
@@ -192,14 +192,14 @@ const buildSheets = (
       used += height;
     });
 
-    if (view === 'student' && type === '单项选择题') {
+    if (view === 'student' && roleOfType(type) === 'choice') {
       if (used + CHOICE_ANSWER_HEIGHT > budget() && current.length > 0) {
-        finishPage('单项选择题');
+        finishPage(type);
       }
       current.push({
         kind: 'choice-answers',
         numbers: ordered
-          .filter((question) => question.type === '单项选择题')
+          .filter((question) => roleOfType(question.type) === 'choice')
           .map(
             (question) =>
               ordered.findIndex((item) => item.questionNo === question.questionNo) + 1,
@@ -259,8 +259,9 @@ function ChoiceAnswerGrid({ numbers }: { numbers: number[] }) {
 }
 
 function StudentAnswer({ question }: { question: CandidateQuestion }) {
-  if (question.type === '单项选择题') return null;
-  if (question.type === '填空题') {
+  const role = roleOfType(question.type);
+  if (role === 'choice') return null;
+  if (role === 'fill') {
     return (
       <div className="paper-student-answer">
         <span className="paper-answer-label">答：</span>
@@ -268,7 +269,7 @@ function StudentAnswer({ question }: { question: CandidateQuestion }) {
       </div>
     );
   }
-  if (question.type === '简答与分析题') {
+  if (role === 'short' || role === 'other') {
     return (
       <div className="paper-student-answer">
         <span className="paper-answer-label">答：</span>
@@ -417,11 +418,21 @@ function PaperSheet({
           <h2>考试说明</h2>
           <ol>
             <li>
-              本试卷共四道大题，{questionCount} 道小题，满分 {totalScore} 分，考试时间 {duration} 分钟。
+              本试卷共 {QUESTION_TYPES.length} 道大题，{questionCount} 道小题，满分{' '}
+              {totalScore} 分，考试时间 {duration} 分钟。
             </li>
             <li>答题前，请将学院、专业、班级、姓名、学号填写在试卷指定位置。</li>
             <li>
-              单项选择题、填空题的答案填写在答题区；简答与分析题、算法设计与分析题按题号在指定区域作答，算法题请按行书写代码或算法过程。
+              {COURSE_PACK.questionTypes
+                .filter((type) => type.role === 'choice')
+                .map((type) => type.label)
+                .join('、') || '客观题'}
+              的答案填写在答题区；
+              {COURSE_PACK.questionTypes
+                .filter((type) => type.role !== 'choice')
+                .map((type) => type.label)
+                .join('、')}
+              按题号在指定区域作答，综合设计题按行预留书写区。
             </li>
             <li>闭卷考试，不得使用手机、计算器等电子设备；请使用黑色签字笔作答，可携带直尺、橡皮。</li>
           </ol>
@@ -554,10 +565,11 @@ export default function ComposePage() {
   }, [order, questionByNo, baseQuestions]);
 
   const totalScore = ordered.reduce((total, question) => total + question.score, 0);
-  const duration = draft?.durationMinutes ?? 120;
+  const duration = draft?.durationMinutes ?? COURSE_PACK.counts.durationMinutes;
   const minutesOf = (type: QuestionType): number =>
     draft?.timeAllocation.find((allocation) => allocation.questionType === type)?.minutes ??
-    FALLBACK_MINUTES[type];
+    FALLBACK_MINUTES[type] ??
+    0;
   const sheets = useMemo(
     () => buildSheets(ordered, view, minutesOf),
     [ordered, view, draft],
@@ -680,10 +692,17 @@ export default function ComposePage() {
   if (!draft || baseQuestions.length === 0) {
     return (
       <section className="page compose-page">
-        <header className="page-header">
-          <h1>成卷与导出</h1>
-          <p className="page-duty">装配与输出</p>
-        </header>
+        <PageHeader
+          step={7}
+          title="成卷与导出"
+          duty="装配、签发与打印"
+          goal="调整题序、预览学生卷 / 教师卷版式，完成二次确认签发并打印导出；已签发版本不可原地修改。"
+          next={{
+            label: '过程回放',
+            to: '/replay',
+            hint: '复盘 Agent 调用、教师决策与版本 diff',
+          }}
+        />
         <div className="page-panel compose-panel">
           <div className="compose-empty">
             <span className="compose-kicker">成卷</span>
@@ -704,10 +723,17 @@ export default function ComposePage() {
 
   return (
     <section className="page compose-page">
-      <header className="page-header">
-        <h1>成卷与导出</h1>
-        <p className="page-duty">装配与输出</p>
-      </header>
+      <PageHeader
+        step={7}
+        title="成卷与导出"
+        duty="装配、签发与打印"
+        goal="调整题序、预览学生卷 / 教师卷版式，完成二次确认签发并打印导出；已签发版本不可原地修改。"
+        next={{
+          label: '过程回放',
+          to: '/replay',
+          hint: '复盘 Agent 调用、教师决策与版本 diff',
+        }}
+      />
 
       <div className="page-panel compose-panel">
         <div className="compose-toolbar">
@@ -820,7 +846,7 @@ export default function ComposePage() {
             <section className="compose-card">
               <div className="compose-card-head">
                 <h2>题序</h2>
-                <span>{locked ? '已签发锁定' : '四类题型内调整'}</span>
+                <span>{locked ? '已签发锁定' : `${QUESTION_TYPES.length} 类题型内调整`}</span>
               </div>
               <div className="compose-order">
                 {groups.map((group, groupIndex) => (
@@ -867,11 +893,11 @@ export default function ComposePage() {
               </div>
             </section>
 
-            <section className="compose-card">
-              <div className="compose-card-head">
-                <h2>版本快照</h2>
-                <span>{snapshots.length} 个已签发版本</span>
-              </div>
+            <Collapsible
+              title="版本快照"
+              summary={`${snapshots.length} 个已签发版本`}
+              className="compose-card"
+            >
               {snapshots.length > 0 ? (
                 <div className="compose-snapshots">
                   {snapshots.map((snapshot) => (
@@ -898,7 +924,7 @@ export default function ComposePage() {
               ) : (
                 <p className="compose-muted">尚未签发；签发后固化试卷与版本快照。</p>
               )}
-            </section>
+            </Collapsible>
           </aside>
 
           <section className="compose-preview">

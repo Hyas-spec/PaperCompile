@@ -27,6 +27,8 @@ import {
   type ItemStatus,
 } from './contractData';
 import { useContractStore } from '../store/contract';
+import { COURSE_PACK } from '../courses/active';
+import PageHeader from '../components/PageHeader';
 import '../styles/contract.css';
 
 const SCOPE_OPTIONS = SCOPE_GROUPS.flatMap((group) => group.options);
@@ -53,7 +55,7 @@ export default function ContractPage() {
   const [rows, setRows] = useState<ContractRow[]>(() =>
     rowsFromContract(useContractStore.getState().contract),
   );
-  const [selectedId, setSelectedId] = useState('C-07');
+  const [selectedId, setSelectedId] = useState(() => rows[0]?.id ?? 'C-01');
   const [dirty, setDirty] = useState(
     () => useContractStore.getState().savedAt === null,
   );
@@ -237,10 +239,17 @@ export default function ContractPage() {
 
   return (
     <section className="page contract-page">
-      <header className="page-header">
-        <h1>命题契约编辑器</h1>
-        <p className="page-duty">定义可校验条款</p>
-      </header>
+      <PageHeader
+        step={4}
+        title="命题契约编辑器"
+        duty="配置结构化命题契约"
+        goal="把蓝图中的“应满足条件”写成结构化、可校验的契约条款，并在编辑时完成可满足性静态检查。"
+        next={{
+          label: '命题工作区',
+          to: '/proposition',
+          hint: '契约保存后，发起六 Agent 协同出题',
+        }}
+      />
 
       <div className="page-panel contract-panel">
         <div className="contract-toolbar">
@@ -256,7 +265,8 @@ export default function ContractPage() {
               {dirty || !savedAt ? '编辑中' : '已保存'}
             </span>
             <span className="contract-meta">
-              《数据结构》期中考试 · 命题蓝图 v1 · {rows.length} 条契约项
+              《{COURSE_PACK.template.name}》{COURSE_PACK.template.examName} · 命题蓝图 v1 ·{' '}
+              {rows.length} 条契约项
             </span>
           </div>
 

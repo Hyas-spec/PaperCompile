@@ -25,6 +25,7 @@ import {
   type RecompileReport,
   type VersionOption,
 } from '../store/events';
+import PageHeader from '../components/PageHeader';
 import '../styles/replay.css';
 
 type ReplayTrace = Omit<QuestionTrace, 'L7'> & { L7?: TraceL7 };
@@ -614,10 +615,17 @@ export default function ReplayPage() {
   if (events.length === 0) {
     return (
       <section className="page replay-page">
-        <header className="page-header">
-          <h1>过程回放</h1>
-          <p className="page-duty">复盘</p>
-        </header>
+        <PageHeader
+          step={7}
+          title="过程回放"
+          duty="时间轴复盘与版本 diff"
+          goal="按时间轴复盘 Agent 调用、教师决策与版本变更，逐条展开证据，查看四类快照与同参数重编译结果。"
+          next={{
+            label: '成卷与导出',
+            to: '/compose',
+            hint: '如需重新签发，回到成卷页派生新版本',
+          }}
+        />
         <div className="page-panel replay-panel">
           <div className="replay-empty">
             <span className="replay-kicker">复盘</span>
@@ -637,10 +645,17 @@ export default function ReplayPage() {
 
   return (
     <section className="page replay-page">
-      <header className="page-header">
-        <h1>过程回放</h1>
-        <p className="page-duty">复盘</p>
-      </header>
+      <PageHeader
+        step={7}
+        title="过程回放"
+        duty="时间轴复盘与版本 diff"
+        goal="按时间轴复盘 Agent 调用、教师决策与版本变更，逐条展开证据，查看四类快照与同参数重编译结果。"
+        next={{
+          label: '成卷与导出',
+          to: '/compose',
+          hint: '如需重新签发，回到成卷页派生新版本',
+        }}
+      />
 
       <div className="page-panel replay-panel">
         <div className="replay-toolbar">

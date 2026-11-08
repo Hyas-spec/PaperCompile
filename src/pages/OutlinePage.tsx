@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MOCK_OUTLINE } from './outlineData';
 import { usePaperStore, type KnowledgePointDraft } from '../store';
+import PageHeader from '../components/PageHeader';
 import '../styles/outline.css';
 
 type CandidateState = 'pending' | 'adopted' | 'ignored';
@@ -136,10 +137,17 @@ export default function OutlinePage() {
 
   return (
     <section className="page outline-page">
-      <header className="page-header">
-        <h1>大纲解析页</h1>
-        <p className="page-duty">上传、解析与确认知识点候选</p>
-      </header>
+      <PageHeader
+        step={1}
+        title="大纲解析页"
+        duty="导入大纲、解析候选知识点"
+        goal="把当前课程的教学大纲解析成带段落锚点的候选知识点，勾选采纳后生成供教师审定的知识点草稿。"
+        next={{
+          label: '知识点工作台',
+          to: '/knowledge',
+          hint: '生成草稿后审定权重、认知层次与超纲禁区',
+        }}
+      />
 
       <div className="page-panel outline-panel">
         <div className="outline-top">

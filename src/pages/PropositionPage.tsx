@@ -15,6 +15,9 @@ import {
   CHAPTER_DEFS,
   QUESTION_TYPE_DEFS,
 } from './propositionData';
+import { COURSE_PACK } from '../courses/active';
+import PageHeader from '../components/PageHeader';
+import Collapsible from '../components/Collapsible';
 import '../styles/proposition.css';
 
 const RUN_STATUS_TONE: Record<RunStatus, string> = {
@@ -434,17 +437,25 @@ export default function PropositionPage() {
 
   return (
     <section className="page proposition-page">
-      <header className="page-header">
-        <h1>命题工作区</h1>
-        <p className="page-duty">发起与监控出题</p>
-      </header>
+      <PageHeader
+        step={5}
+        title="命题工作区"
+        duty="发起多 Agent 命题任务"
+        goal="按蓝图与契约发起六 Agent 协同命题，查看任务调度队列、运行进度与七道闸门的拦截记录。"
+        next={{
+          label: '题目审查台',
+          to: '/review',
+          hint: '候选题入池后，由教师逐题终审',
+        }}
+      />
 
       <div className="page-panel proposition-panel">
         <div className="proposition-toolbar">
           <div className="proposition-toolbar-left">
             <span className="proposition-version">命题任务单</span>
             <span className="proposition-meta">
-              《数据结构》期中考试 · 命题蓝图 {overview.blueprintVersion} · 命题契约 v1
+              《{COURSE_PACK.template.name}》{COURSE_PACK.template.examName} · 命题蓝图{' '}
+              {overview.blueprintVersion} · 命题契约 v1
             </span>
             <span
               className={`proposition-run-status ${
@@ -625,7 +636,7 @@ export default function PropositionPage() {
                 <strong>
                   {overview.questionCount} 题 / {overview.totalScore} 分
                 </strong>
-                <p>{overview.durationMinutes} 分钟 · 8 章</p>
+                <p>{overview.durationMinutes} 分钟 · {overview.chapterCount} 章</p>
               </div>
               <div>
                 <span>命题契约 v1</span>
@@ -751,11 +762,11 @@ export default function PropositionPage() {
                 })}
               </div>
 
-              <div className="proposition-log">
-                <div className="proposition-log-head">
-                  <h2>运行记录</h2>
-                  <span>{logs.length} 条</span>
-                </div>
+              <Collapsible
+                title="运行记录"
+                summary={`${logs.length} 条 · Agent 调用与调度事件`}
+                className="proposition-log"
+              >
                 <div className="proposition-log-list">
                   {logs.length > 0 ? (
                     logs.slice(0, 30).map((log) => (
@@ -780,7 +791,7 @@ export default function PropositionPage() {
                     </p>
                   )}
                 </div>
-              </div>
+              </Collapsible>
             </section>
 
             <aside className="proposition-detail">
