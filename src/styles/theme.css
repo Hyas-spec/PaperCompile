@@ -1,0 +1,42 @@
+:root {
+  color-scheme: light;
+
+  /* 主色 · 强调色 */
+  --pc-primary: #1F3F66;
+  --pc-accent: #2E6FA3;
+
+  /* 语义色：通过 / 提示 / 拦截 */
+  --pc-pass: #2F7A5B;
+  --pc-hint: #B4761F;
+  --pc-block: #A94442;
+
+  /* 中性色：背景 / 描边 / 正文 / 次要 */
+  --pc-bg: #F4F6F8;
+  --pc-border: #D8DEE6;
+  --pc-ink: #1B2430;
+  --pc-muted: #5F6B7A;
+  --pc-surface: #FFFFFF;
+
+  /* 语义浅底 */
+  --pc-primary-soft: rgba(31, 63, 102, 0.06);
+  --pc-accent-soft: rgba(46, 111, 163, 0.08);
+  --pc-pass-soft: rgba(47, 122, 91, 0.1);
+  --pc-hint-soft: rgba(180, 118, 31, 0.1);
+  --pc-block-soft: rgba(169, 68, 66, 0.1);
+
+  /* 形状 · 栅格 */
+  --pc-radius: 4px;
+  --pc-line: 1px solid var(--pc-border);
+  --pc-gap: 16px;
+  --pc-gap-lg: 24px;
+  --pc-sidebar-width: 240px;
+  --pc-topbar-height: 56px;
+
+  /* 字体 */
+  --pc-font-ui: "Microsoft YaHei", "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  --pc-font-body: "Songti SC", "Noto Serif CJK SC", "Noto Serif SC", SimSun, serif;
+  --pc-font-mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+
+  /* 动效：仅用于状态迁移 */
+  --pc-transition: 160ms ease;
+}
