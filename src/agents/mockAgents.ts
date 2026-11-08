@@ -1,0 +1,665 @@
+import type {
+  ArbitrationAgentInput,
+  ArbitrationAgentOutput,
+  BlueprintCell,
+  CandidateQuestion,
+  ComposeAgentInput,
+  ComposeAgentOutput,
+  DifficultyLevel,
+  KnowledgePoint,
+  PlanningAgentInput,
+  PlanningAgentOutput,
+  PropositionAgentInput,
+  PropositionAgentOutput,
+  PropositionTask,
+  QuestionOption,
+  QuestionType,
+  ReviewAgentInput,
+  ReviewAgentOutput,
+  ThreeStateConclusion,
+  TraceL1,
+  ValidationAgentInput,
+  ValidationAgentOutput,
+  ValidationGate,
+  ValidationResult,
+} from '../types';
+import {
+  CHAPTER_ORDER,
+  MOCK_BLUEPRINT,
+  TYPE_ORDER,
+  cognitiveOfType,
+  expectedDifficultyOfCell,
+  requirementOfPoint,
+  scoreOfType,
+} from '../pages/propositionData';
+
+/* ===== 规划 Agent ===== */
+
+export interface MockPlanningInput extends PlanningAgentInput {
+  knowledgeBase: KnowledgePoint[];
+}
+
+const TYPE_CONTRACT: Record<QuestionType, string> = {
+  单项选择题: 'C-04',
+  填空题: 'C-05',
+  简答与分析题: 'C-06',
+  算法设计与分析题: 'C-07',
+};
+
+const DIFFICULTY_CONTRACT: Record<DifficultyLevel, string> = {
+  易: 'C-11',
+  中: 'C-12',
+  难: 'C-13',
+};
+
+const difficultyOfCell = (
+  cell: BlueprintCell,
+  hardAlgorithmChapter: string | undefined,
+): DifficultyLevel => {
+  if (cell.questionType === '单项选择题') return '易';
+  if (cell.questionType === '算法设计与分析题') {
+    return cell.chapter === hardAlgorithmChapter ? '难' : '中';
+  }
+  return '中';
+};
+
+export function planAgent(input: MockPlanningInput): PlanningAgentOutput {
+  const algorithmCells = input.blueprint.cells.filter(
+    (cell) => cell.questionType === '算法设计与分析题',
+  );
+  const hardAlgorithmChapter = algorithmCells.reduce<BlueprintCell | null>(
+    (lowest, cell) =>
+      !lowest || cell.difficulty < lowest.difficulty ? cell : lowest,
+    null,
+  )?.chapter;
+
+  const tasks: PropositionTask[] = [];
+  const chapterCursor = new Map<string, number>();
+  let taskNo = 0;
+
+  for (const cell of input.blueprint.cells) {
+    const points = input.knowledgeBase.filter(
+      (point) => point.chapter === cell.chapter && !point.outOfScope,
+    );
+    if (points.length === 0) {
+      throw new Error(`章节「${cell.chapter}」缺少可用知识点，无法拆分任务单`);
+    }
+
+    for (let index = 0; index < cell.questionCount; index += 1) {
+      taskNo += 1;
+      const cursor = chapterCursor.get(cell.chapter) ?? 0;
+      const point = points[cursor % points.length];
+      chapterCursor.set(cell.chapter, cursor + 1);
+      const difficulty = difficultyOfCell(cell, hardAlgorithmChapter);
+
+      tasks.push({
+        id: `T-${String(taskNo).padStart(2, '0')}`,
+        chapter: cell.chapter,
+        questionType: cell.questionType,
+        difficulty,
+        context: {
+          knowledgePointIds: [point.id],
+          contractItemIds: [
+            TYPE_CONTRACT[cell.questionType],
+            DIFFICULTY_CONTRACT[difficulty],
+            'C-08',
+            'C-09',
+            'C-10',
+          ],
+        },
+      });
+    }
+  }
+
+  return { tasks };
+}
+
+/* ===== 命题 Agent ===== */
+
+export interface MockPropositionInput extends PropositionAgentInput {
+  variant: 'A' | 'B';
+  attempt: number;
+  round: number;
+  knowledgeBase: KnowledgePoint[];
+}
+
+const difficultyCoefficient = (level: DifficultyLevel): number => {
+  if (level === '易') return 0.85;
+  if (level === '难') return 0.5;
+  return 0.65;
+};
+
+const commonErrorsOf = (type: QuestionType): string => {
+  if (type === '单项选择题') return '易把存储结构差异与操作效率差异混淆。';
+  if (type === '填空题') return '易漏写关键条件，或把复杂度结论写成近似值。';
+  if (type === '简答与分析题') return '只给结论，缺少推导过程与适用条件。';
+  return '只写代码，未说明建模过程、正确性依据与复杂度。';
+};
+
+const choiceOptions = (
+  point: KnowledgePoint,
+  variant: 'A' | 'B',
+): { options: QuestionOption[]; answer: string } => {
+  const correct =
+    requirementOfPoint(point) || `${point.name}属于本章要求掌握的内容。`;
+  const distractors = [
+    `${point.name}只适用于顺序存储。`,
+    `${point.name}与时间复杂度无关。`,
+    `${point.name}不属于本课程考核范围。`,
+  ];
+  if (variant === 'B') {
+    return {
+      options: [
+        { label: 'A', content: distractors[0] },
+        { label: 'B', content: correct },
+        { label: 'C', content: distractors[1] },
+        { label: 'D', content: distractors[2] },
+      ],
+      answer: 'B',
+    };
+  }
+  return {
+    options: [
+      { label: 'A', content: correct },
+      { label: 'B', content: distractors[0] },
+      { label: 'C', content: distractors[1] },
+      { label: 'D', content: distractors[2] },
+    ],
+    answer: 'A',
+  };
+};
+
+const algorithmStem = (
+  point: KnowledgePoint,
+  chapter: string,
+  variant: 'A' | 'B',
+): string => {
+  if (chapter === '树与二叉树') {
+    return variant === 'B'
+      ? '给定一棵二叉树的先序与中序遍历序列，请完成：（1）重构该二叉树；（2）写出后序遍历序列；（3）判断该树是否为完全二叉树，并说明判定口径。'
+      : '给定一棵二叉树，请完成：（1）写出先序遍历过程；（2）写出中序遍历过程；（3）分析遍历算法的时间复杂度。';
+  }
+  return variant === 'B'
+    ? `以「${point.name}」为背景，设计一个求解算法，完成：（1）说明建模过程；（2）写出伪代码；（3）分析最坏与平均时间复杂度。`
+    : `以「${point.name}」为背景，设计一个求解算法，完成：（1）描述算法思想；（2）写出伪代码；（3）分析时间复杂度。`;
+};
+
+export function propositionAgent(
+  input: MockPropositionInput,
+): PropositionAgentOutput {
+  const { task, variant, round } = input;
+  const point =
+    input.knowledgeBase.find(
+      (candidate) => candidate.id === task.context.knowledgePointIds[0],
+    ) ?? input.knowledgeBase[0];
+  if (!point) throw new Error('命题上下文缺少知识点');
+
+  const key = `${task.id}-${variant}${round > 1 ? `-r${round}` : ''}`;
+  const blockedByT14 =
+    round === 1 && task.id === 'T-14' && variant === 'B';
+  const blockedByT24 =
+    round === 1 && task.id === 'T-24' && variant === 'B';
+  const stemOverride = blockedByT14
+    ? '关于线索二叉树，下列说法正确的是（ ）。'
+    : blockedByT24
+      ? '简述 B 树与二叉排序树的区别，并分析 B 树的查找效率。'
+      : null;
+
+  let stem = '';
+  let options: QuestionOption[] | undefined;
+  let answer = '';
+  let analysis = '';
+  let scoringPoints = [{ description: '答案要点', score: scoreOfType(task.questionType) }];
+
+  if (stemOverride) {
+    stem = stemOverride;
+    if (blockedByT14) {
+      options = [
+        { label: 'A', content: '线索二叉树利用空指针域存放前驱与后继信息' },
+        { label: 'B', content: '线索二叉树必须使用三叉链表' },
+        { label: 'C', content: '线索二叉树不能进行遍历' },
+        { label: 'D', content: '线索二叉树只适用于完全二叉树' },
+      ];
+      answer = 'A';
+      analysis = '线索二叉树通过线索化利用空指针域，支持按前驱后继遍历。';
+    } else {
+      answer =
+        'B 树是多路平衡查找树，结点可含多个关键字与子树；二叉排序树是二叉结构。B 树查找效率与树高相关，通常为 O(log n)。';
+      analysis = '按多路平衡、结点结构与查找复杂度三个维度比较。';
+      scoringPoints = [
+        { description: '结构区别', score: 2 },
+        { description: '查找效率', score: 2 },
+        { description: '表达完整', score: 1 },
+      ];
+    }
+  } else if (task.questionType === '单项选择题') {
+    stem =
+      variant === 'B'
+        ? `关于「${point.name}」的下列说法中，正确的是（ ）。`
+        : `关于「${point.name}」，下列说法正确的是（ ）。`;
+    const choice = choiceOptions(point, variant);
+    options = choice.options;
+    answer = choice.answer;
+    analysis = `本题考查「${point.name}」。正确项对应大纲要求：${requirementOfPoint(point)}`;
+    scoringPoints = [{ description: '概念辨析', score: 2 }];
+  } else if (task.questionType === '填空题') {
+    stem = `「${point.name}」的核心要求是 ______。`;
+    answer = requirementOfPoint(point);
+    analysis = `按「${point.name}」在大纲中的考核要求作答。`;
+    scoringPoints = [{ description: '关键定义与结论', score: 2 }];
+  } else if (task.questionType === '简答与分析题') {
+    stem = `简述「${point.name}」的基本思想，并说明其适用场景。`;
+    answer = `${requirementOfPoint(point)}适用场景需结合本章知识结构说明。`;
+    analysis = '按基本思想、过程要点与适用场景分点作答。';
+    scoringPoints = [
+      { description: '基本思想', score: 2 },
+      { description: '适用场景', score: 2 },
+      { description: '表达完整', score: 1 },
+    ];
+  } else {
+    stem = algorithmStem(point, task.chapter, variant);
+    answer =
+      task.chapter === '树与二叉树'
+        ? '按先序确定根、中序划分左右子树；后序遍历为左右根；完全二叉树需按层序检查结点连续性。'
+        : `围绕「${point.name}」建立模型，按步骤执行并做复杂度分析；需给出正确性依据与最坏情况结论。`;
+    analysis = '按建模、算法过程、正确性依据与复杂度四个评分点组织答案。';
+    scoringPoints = [
+      { description: '建模与思路', score: 5 },
+      { description: '算法过程', score: 5 },
+      { description: '正确性依据', score: 5 },
+      { description: '复杂度分析', score: 5 },
+    ];
+  }
+
+  // 演示结构化 schema 的失败重试：T-13 的首个候选首次输出缺少答案。
+  if (round === 1 && task.id === 'T-13' && variant === 'A' && input.attempt === 0) {
+    answer = '';
+  }
+
+  const candidate: CandidateQuestion = {
+    id: `cand-${key}`,
+    questionNo: key,
+    version: round === 1 ? 'v1' : `v1.${round - 1}`,
+    type: task.questionType,
+    score: scoreOfType(task.questionType),
+    difficulty: difficultyCoefficient(task.difficulty),
+    chapter: task.chapter,
+    knowledgePointId: point.id,
+    cognitiveLevel: cognitiveOfType(task.questionType),
+    contractItemId: TYPE_CONTRACT[task.questionType],
+    stem,
+    options,
+    answer,
+    analysis,
+    scoringPoints,
+    propositionNote: {
+      intent: `考查「${point.name}」的${task.questionType}能力，对应 ${task.chapter} × ${task.questionType} × ${task.difficulty}。`,
+      difficultyBasis: `按命题蓝图「${task.chapter}」的期望难度 ${expectedDifficultyOfCell(
+        task.chapter,
+        task.questionType,
+      ).toFixed(2)} 与 ${task.difficulty} 档目标分配。`,
+      distractorDesign:
+        task.questionType === '单项选择题'
+          ? '干扰项分别对应存储结构、复杂度与课程范围三类常见误判。'
+          : undefined,
+      commonErrors: commonErrorsOf(task.questionType),
+    },
+    generation: {
+      modelName: 'mock-papercompile',
+      modelVersion: 'mock-1.0',
+      promptTemplate: 'proposition.md',
+      promptTemplateVersion: 'v1',
+      inputSummary: `${task.id} ${task.chapter} × ${task.questionType} × ${task.difficulty}`,
+      outputSummary: `候选 ${key}`,
+      randomSeed: key,
+    },
+  };
+
+  return { candidate };
+}
+
+/* ===== 审题 Agent：只接收 L1 题目 ===== */
+
+export function toTraceL1(candidate: CandidateQuestion): TraceL1 {
+  return {
+    questionNo: candidate.questionNo,
+    stem: candidate.stem,
+    options: candidate.options?.map((option) => ({ ...option })),
+    answer: candidate.answer,
+    analysis: candidate.analysis,
+    scoringPoints: candidate.scoringPoints.map((point) => ({ ...point })),
+  };
+}
+
+const REVIEW_KEYS = new Set([
+  'T-12-B',
+  'T-13-B',
+  'T-15-B',
+  'T-16-B',
+  'T-17-B',
+  'T-18-B',
+  'T-19-B',
+  'T-21-B',
+  'T-22-B',
+]);
+const RESOLVABLE_KEYS = new Set(['T-12-B', 'T-19-B', 'T-22-B']);
+
+export function reviewAgent(input: ReviewAgentInput): ReviewAgentOutput {
+  if (!REVIEW_KEYS.has(input.question.questionNo)) {
+    return {
+      conclusion: '通过',
+      issues: [],
+      recomputedAnswer: input.question.answer,
+    };
+  }
+
+  const options = input.question.options ?? [];
+  let issue = {
+    description: '作答口径未限定，存在多种合理解法',
+    evidence: '题干未限定比较维度或作答形式，答案可能不唯一。',
+  };
+
+  if (options.length > 0) {
+    issue = {
+      description: '选项 C 与 D 在边界条件下等价',
+      evidence: 'C、D 在边界值处指向同一判定结果，需确认选项互斥性。',
+    };
+  } else if (input.question.stem.includes('完全二叉树')) {
+    issue = {
+      description: '第（3）问未限定完全二叉树的判定口径',
+      evidence: '第（3）问的判定条件未给出，存在多种解释。',
+    };
+  } else if (input.question.stem.includes('复杂度')) {
+    issue = {
+      description: '复杂度分析口径未限定（最坏 / 平均）',
+      evidence: '题干未说明复杂度分析口径，答案可能不唯一。',
+    };
+  }
+
+  return {
+    conclusion: '需复核',
+    issues: [issue],
+    recomputedAnswer: input.question.answer,
+  };
+}
+
+/* ===== 校验 Agent：七道闸门 ===== */
+
+const gate = (
+  name: ValidationGate,
+  conclusion: ThreeStateConclusion,
+  evidence: string[],
+  suggestion?: string,
+): ValidationResult => ({ gate: name, conclusion, evidence, suggestion });
+
+const normalize = (text: string): string =>
+  text.replace(/[\s，。；：、（）()《》“”"'？?！!—\-]/g, '');
+
+const bigrams = (text: string): Set<string> => {
+  const result = new Set<string>();
+  const normalized = normalize(text);
+  for (let index = 0; index < normalized.length - 1; index += 1) {
+    result.add(normalized.slice(index, index + 2));
+  }
+  return result;
+};
+
+const similarity = (left: string, right: string): number => {
+  const a = bigrams(left);
+  const b = bigrams(right);
+  if (a.size === 0 || b.size === 0) return 0;
+  let overlap = 0;
+  a.forEach((token) => {
+    if (b.has(token)) overlap += 1;
+  });
+  return overlap / (a.size + b.size - overlap);
+};
+
+const worstConclusion = (results: ValidationResult[]): ThreeStateConclusion =>
+  results.some((result) => result.conclusion === '拦截')
+    ? '拦截'
+    : results.some((result) => result.conclusion === '需复核')
+      ? '需复核'
+      : '通过';
+
+export function validationAgent(
+  input: ValidationAgentInput,
+): ValidationAgentOutput {
+  const { question } = input;
+  const point = input.knowledgeBase.find(
+    (candidate) => candidate.id === question.knowledgePointId,
+  );
+  const cell = input.blueprint.cells.find(
+    (candidate) =>
+      candidate.chapter === question.chapter &&
+      candidate.questionType === question.type,
+  );
+
+  const results: ValidationResult[] = [];
+
+  results.push(
+    gate(
+      '覆盖校验',
+      point ? '通过' : '拦截',
+      point
+        ? [
+            `知识点 ${point.id}「${point.name}」已登记且状态为${point.state}。`,
+            `所属章节「${point.chapter}」在教学大纲中可定位。`,
+          ]
+        : [`知识点 ${question.knowledgePointId} 未在知识点库登记。`],
+      point ? undefined : '补登知识点并重新发起命题。',
+    ),
+  );
+
+  results.push(
+    gate(
+      '配比校验',
+      cell ? '通过' : '拦截',
+      cell
+        ? [
+            `题型「${question.type}」匹配蓝图单元格 ${cell.chapter} × ${cell.questionType}。`,
+            `单元格题量 ${cell.questionCount}，分值 ${cell.score} 分。`,
+          ]
+        : [`蓝图缺少「${question.chapter} × ${question.type}」单元格。`],
+      cell ? undefined : '先修订命题蓝图，再重新生成。',
+    ),
+  );
+
+  const levelBand =
+    question.difficulty >= 0.8
+      ? '易（≥0.80）'
+      : question.difficulty >= 0.6
+        ? '中（0.60–0.80）'
+        : '难（<0.60）';
+  results.push(
+    gate(
+      '难度校验',
+      '通过',
+      [
+        `单题难度系数 ${question.difficulty.toFixed(2)}，落在 ${levelBand} 档。`,
+        `蓝图章节期望难度 ${(cell?.difficulty ?? MOCK_BLUEPRINT.difficultyPlan.expected).toFixed(2)}。`,
+      ],
+    ),
+  );
+
+  const labels = new Set(question.options?.map((option) => option.label));
+  const scoringTotal = question.scoringPoints.reduce(
+    (total, item) => total + item.score,
+    0,
+  );
+  const correctnessOk =
+    question.answer.trim().length > 0 &&
+    question.analysis.trim().length > 0 &&
+    (question.type !== '单项选择题' ||
+      (question.options?.length === 4 && labels.size === 4));
+  results.push(
+    gate(
+      '正确性校验',
+      correctnessOk ? '通过' : '拦截',
+      correctnessOk
+        ? [
+            `答案 ${question.answer} 可独立复算。`,
+            `解析与评分点自洽，评分点合计 ${scoringTotal} 分。`,
+          ]
+        : ['答案、解析或选项结构不完整，无法复算。'],
+      correctnessOk ? undefined : '补齐答案与解析后重新生成。',
+    ),
+  );
+
+  const scanText = [
+    question.stem,
+    question.options?.map((option) => option.content).join(' ') ?? '',
+    question.answer,
+    question.analysis,
+  ].join(' ');
+  const outOfScope = input.knowledgeBase.filter(
+    (candidate) => candidate.outOfScope && scanText.includes(candidate.name),
+  );
+  results.push(
+    gate(
+      '超纲校验',
+      outOfScope.length > 0 ? '拦截' : '通过',
+      outOfScope.length > 0
+        ? outOfScope.flatMap((candidate) => [
+            `命中超纲概念「${candidate.name}」（知识点 ID: ${candidate.id}），已在知识点库标记超纲禁区。`,
+            `原文来源：${candidate.sourceAnchors[0]?.anchor ?? '知识点库'}。`,
+          ])
+        : ['题干、选项、答案与解析均未命中超纲禁区概念。'],
+      outOfScope.length > 0
+        ? '删除超纲概念，或先在知识点库登记并通过大纲校验。'
+        : undefined,
+    ),
+  );
+
+  const highest = input.historyBank.reduce(
+    (best, history) => Math.max(best, similarity(question.stem, history.stem)),
+    0,
+  );
+  results.push(
+    gate(
+      '重复校验',
+      highest >= 0.92 ? '拦截' : highest >= 0.82 ? '需复核' : '通过',
+      [
+        `与历史题库 ${input.historyBank.length} 题的最高题干相似度 ${highest.toFixed(2)}。`,
+        '阈值：≥0.92 拦截；≥0.82 提示改写。',
+      ],
+      highest >= 0.82 ? '改写题干与选项，降低与历史题的相似度。' : undefined,
+    ),
+  );
+
+  const structureOk =
+    (question.type !== '单项选择题' || question.options?.length === 4) &&
+    (question.type !== '填空题' || question.stem.includes('______')) &&
+    (question.type === '单项选择题' || question.scoringPoints.length > 0);
+  const formatOk =
+    structureOk && Math.abs(scoringTotal - question.score) < 1e-9;
+  results.push(
+    gate(
+      '格式校验',
+      formatOk ? '通过' : '拦截',
+      formatOk
+        ? [
+            `题型结构符合「${question.type}」模板。`,
+            `评分点合计 ${scoringTotal} 分，与题目分值 ${question.score} 分一致。`,
+          ]
+        : ['题型结构、答题空间或分值合计不符合模板。'],
+      formatOk ? undefined : '按题型模板补齐结构并核对分值合计。',
+    ),
+  );
+
+  return {
+    overall: worstConclusion(results),
+    results,
+  };
+}
+
+/* ===== 仲裁 Agent ===== */
+
+export function arbitrationAgent(
+  input: ArbitrationAgentInput,
+): ArbitrationAgentOutput {
+  const issueText = input.review.issues
+    .map((issue) => `${issue.description}（${issue.evidence}）`)
+    .join('；');
+  const optionText = input.question.options?.length
+    ? input.question.options.map((option) => option.label).join(' / ')
+    : '无选项';
+
+  if (RESOLVABLE_KEYS.has(input.question.questionNo)) {
+    return {
+      conclusion: '通过',
+      reason:
+        '独立复算与选项互斥性检查支持命题答案，审题疑点属于表述层面，不改变答案唯一性。',
+      evidence: [
+        `复算答案：${input.question.answer}`,
+        `选项标签：${optionText}`,
+        `审题疑点：${issueText}`,
+        `命题说明：${input.propositionNote.intent}`,
+      ],
+      escalatedToHuman: false,
+    };
+  }
+
+  if (input.review.conclusion === '拦截') {
+    return {
+      conclusion: '拦截',
+      reason: '审题疑点足以影响答案正确性，且复算无法排除歧义。',
+      evidence: [
+        `复算答案：${input.question.answer}`,
+        `审题疑点：${issueText}`,
+        `命题说明：${input.propositionNote.intent}`,
+      ],
+      escalatedToHuman: false,
+    };
+  }
+
+  return {
+    conclusion: '需复核',
+    reason: '审题疑点涉及判定口径，现有证据不足以裁决，升级人工。',
+    evidence: [
+      `复算答案：${input.question.answer}`,
+      `审题疑点：${issueText}`,
+      `命题说明：${input.propositionNote.intent}`,
+      '现有规则无法判定该口径，按协同机制转入教师复核。',
+    ],
+    escalatedToHuman: true,
+  };
+}
+
+/* ===== 组卷 Agent ===== */
+
+export function composeAgent(input: ComposeAgentInput): ComposeAgentOutput {
+  const typeOrder = new Map(TYPE_ORDER.map((type, index) => [type, index]));
+  const chapterOrder = new Map(
+    CHAPTER_ORDER.map((chapter, index) => [chapter, index]),
+  );
+  const questions = [...input.finalQuestions].sort((left, right) => {
+    const typeDiff =
+      (typeOrder.get(left.type) ?? 0) - (typeOrder.get(right.type) ?? 0);
+    if (typeDiff !== 0) return typeDiff;
+    const chapterDiff =
+      (chapterOrder.get(left.chapter) ?? 0) -
+      (chapterOrder.get(right.chapter) ?? 0);
+    if (chapterDiff !== 0) return chapterDiff;
+    return left.questionNo.localeCompare(right.questionNo);
+  });
+
+  return {
+    draft: {
+      questions,
+      totalScore: questions.reduce((total, question) => total + question.score, 0),
+      durationMinutes: input.blueprint.durationMinutes,
+      timeAllocation: [
+        { questionType: '单项选择题', minutes: 30 },
+        { questionType: '填空题', minutes: 10 },
+        { questionType: '简答与分析题', minutes: 30 },
+        { questionType: '算法设计与分析题', minutes: 50 },
+      ],
+      layout: {
+        paperSize: 'A4',
+        doubleSided: true,
+        answerAreaReserved: true,
+      },
+    },
+  };
+}
