@@ -8,12 +8,11 @@ export type ThreeStateConclusion = '通过' | '需复核' | '拦截';
 /** 教师终审动作：通过 / 改写 / 换题 / 退回 */
 export type ReviewAction = '通过' | '改写' | '换题' | '退回';
 
-/** 四大题型 */
-export type QuestionType =
-  | '单项选择题'
-  | '填空题'
-  | '简答与分析题'
-  | '算法设计与分析题';
+/**
+ * 题型名称。内置演示课程使用四大题型，其他课程模板可在
+ * `CourseQuestionType` 中定义自己的题型名称与分值，不再写死。
+ */
+export type QuestionType = string;
 
 /** 难度档位：易 / 中 / 难 */
 export type DifficultyLevel = '易' | '中' | '难';

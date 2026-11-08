@@ -1,4 +1,5 @@
 import type { Contract, ContractItem } from '../types';
+import { COURSE_PACK } from '../courses/active';
 
 /* ===== 契约编辑器数据模型 ===== */
 
@@ -76,25 +77,11 @@ interface BlueprintRef {
   source: string;
 }
 
-/* ===== 说明书中的演示课程口径 ===== */
+/* ===== 当前课程的演示口径 ===== */
 
-export const CHAPTERS = [
-  '绪论',
-  '线性表',
-  '栈与队列',
-  '串',
-  '树与二叉树',
-  '图',
-  '查找',
-  '排序',
-] as const;
+export const CHAPTERS = COURSE_PACK.outline.chapters.map((chapter) => chapter.title);
 
-export const QUESTION_TYPES = [
-  '单项选择题',
-  '填空题',
-  '简答与分析题',
-  '算法设计与分析题',
-] as const;
+export const QUESTION_TYPES = COURSE_PACK.questionTypes.map((type) => type.label);
 
 export const CHAPTER_SCOPE = `各章（${CHAPTERS.length} 章）`;
 
@@ -137,24 +124,79 @@ export const FIELD_LABELS: Record<FieldKey, string> = {
   scope: '适用范围',
 };
 
-const BLUEPRINT: Record<string, BlueprintRef> = {
-  total: { value: 100, band: 0, mode: 'exact', source: '表 2-2' },
-  count: { value: 26, band: 0, mode: 'exact', source: '表 2-2' },
-  duration: { value: 120, band: 0, mode: 'exact', source: '表 2-2' },
-  'typeShare:单项选择题': { value: 30, band: 3, mode: 'exact', source: '表 7-2' },
-  'typeShare:填空题': { value: 10, band: 3, mode: 'exact', source: '表 7-2' },
-  'typeShare:简答与分析题': { value: 20, band: 3, mode: 'exact', source: '表 7-2' },
-  'typeShare:算法设计与分析题': { value: 40, band: 3, mode: 'exact', source: '表 7-2' },
-  coverage: { value: 90, band: 0, mode: 'min', source: '表 2-2' },
-  chapterCoverage: { value: 1, band: 0, mode: 'min', source: '表 2-2' },
-  expectedDifficulty: { value: 0.65, band: 0.05, mode: 'exact', source: '附录 B' },
-  'difficultyBand:易': { value: 30, band: 0, mode: 'exact', source: '表 2-2' },
-  'difficultyBand:中': { value: 50, band: 0, mode: 'exact', source: '表 2-2' },
-  'difficultyBand:难': { value: 20, band: 0, mode: 'exact', source: '表 2-2' },
-};
+const round1 = (value: number): number => Math.round(value * 10) / 10;
+
+/** 题型分值占比：先逐项保留一位小数，再把舍入误差并入最后一项，保证合计 100%。 */
+const TYPE_SHARES: Record<string, number> = (() => {
+  const total = COURSE_PACK.counts.totalScore;
+  const shares = COURSE_PACK.questionTypes.map((type) =>
+    total > 0 ? round1(((type.targetCount * type.score) / total) * 100) : 0,
+  );
+  if (shares.length > 0) {
+    const sum = shares.reduce((acc, value) => acc + value, 0);
+    shares[shares.length - 1] = round1(shares[shares.length - 1] + (100 - sum));
+  }
+  return Object.fromEntries(
+    COURSE_PACK.questionTypes.map((type, index) => [type.label, shares[index]]),
+  );
+})();
+
+const BLUEPRINT: Record<string, BlueprintRef> = (() => {
+  const pack = COURSE_PACK;
+  const total = pack.counts.totalScore;
+  const source = pack.template.sourceLabel;
+  const refs: Record<string, BlueprintRef> = {
+    total: { value: total, band: 0, mode: 'exact', source },
+    count: { value: pack.counts.questionCount, band: 0, mode: 'exact', source },
+    duration: {
+      value: pack.counts.durationMinutes,
+      band: 0,
+      mode: 'exact',
+      source,
+    },
+    coverage: {
+      value: pack.template.coverageTarget.minRate,
+      band: 0,
+      mode: 'min',
+      source,
+    },
+    chapterCoverage: {
+      value: pack.template.coverageTarget.minPerChapter,
+      band: 0,
+      mode: 'min',
+      source,
+    },
+    expectedDifficulty: {
+      value: pack.template.difficultyPlan.expected,
+      band: pack.template.difficultyPlan.tolerance,
+      mode: 'exact',
+      source,
+    },
+  };
+
+  pack.questionTypes.forEach((type) => {
+    refs[`typeShare:${type.label}`] = {
+      value: TYPE_SHARES[type.label] ?? 0,
+      band: type.band,
+      mode: 'exact',
+      source,
+    };
+  });
+
+  pack.difficultyBands.forEach((band) => {
+    refs[`difficultyBand:${band.level}`] = {
+      value: band.scoreRatio,
+      band: 0,
+      mode: 'exact',
+      source,
+    };
+  });
+
+  return refs;
+})();
 
 const TYPE_SUBJECTS = [...QUESTION_TYPES];
-const DIFFICULTY_SUBJECTS = ['易', '中', '难'];
+const DIFFICULTY_SUBJECTS = COURSE_PACK.difficultyBands.map((band) => band.level);
 
 /* ===== 默认契约条款 ===== */
 
@@ -187,139 +229,120 @@ function makeRow(
   };
 }
 
-/**
- * 13 条契约项全部取自说明书演示课程：
- * 表 2-2、表 7-2 与附录 B。C-07 保留 5.3 节的编辑现场：
- * 算法题型目标被调到 50%，用于展示冲突定位。
- */
-export const DEFAULT_ROWS: ContractRow[] = [
-  makeRow(
-    'C-01',
-    '全卷满分',
-    '满分',
-    100,
-    0,
-    '整卷',
-    '表 2-2：期中考试，闭卷，120 分钟，满分 100 分。',
-  ),
-  makeRow(
-    'C-02',
-    '全卷题量',
-    '题量',
-    26,
-    0,
-    '整卷',
-    '表 2-2：题目总量 26 题（单选 15 + 填空 5 + 简答 4 + 算法 2）。',
-  ),
-  makeRow(
-    'C-03',
-    '考试时长',
-    '考试时长',
-    120,
-    0,
-    '整卷',
-    '表 2-2：闭卷，120 分钟。',
-  ),
-  makeRow(
-    'C-04',
-    '单项选择题分值占比',
-    '题型配比',
-    30,
-    3,
-    '整卷',
-    '表 7-2：单项选择题 15 题 × 2 分 = 30 分，占 100 分的 30%。',
-    { subject: '单项选择题' },
-  ),
-  makeRow(
-    'C-05',
-    '填空题分值占比',
-    '题型配比',
-    10,
-    3,
-    '整卷',
-    '表 7-2：填空题 5 题 × 2 分 = 10 分，占 100 分的 10%。',
-    { subject: '填空题' },
-  ),
-  makeRow(
-    'C-06',
-    '简答与分析题分值占比',
-    '题型配比',
-    20,
-    3,
-    '整卷',
-    '表 7-2：简答与分析题 4 题 × 5 分 = 20 分，占 100 分的 20%。',
-    { subject: '简答与分析题' },
-  ),
-  makeRow(
-    'C-07',
-    '算法设计与分析题分值占比',
-    '题型配比',
-    50,
-    3,
-    '整卷',
-    '表 7-2：算法设计与分析题 2 题 × 20 分 = 40 分，占 100 分的 40%。',
-    { subject: '算法设计与分析题', recoveryHint: '简答题' },
-  ),
-  makeRow(
-    'C-08',
-    '知识点覆盖率',
-    '知识点覆盖率',
-    90,
-    0,
-    '整卷',
-    '表 2-2：知识点覆盖率 ≥ 90%，且每章至少命中 1 题。',
-    { comparator: '≥' },
-  ),
-  makeRow(
-    'C-09',
-    '每章至少命中题数',
-    '章节覆盖',
-    1,
-    0,
-    CHAPTER_SCOPE,
-    '表 2-2：知识点覆盖率 ≥ 90%，且每章至少命中 1 题。',
-    { comparator: '≥' },
-  ),
-  makeRow(
-    'C-10',
-    '整卷期望难度',
-    '期望难度',
-    0.65,
-    0.05,
-    '整卷',
-    '附录 B：整卷期望难度 0.68，落在蓝图设定的 0.65 ± 0.05 区间内。',
-  ),
-  makeRow(
-    'C-11',
-    '易档分值占比（≥ 0.80）',
-    '难度分布',
-    30,
-    0,
-    '整卷',
-    '表 2-2：难度目标 易（≥0.80）30%、中（0.60–0.80）50%、难（<0.60）20%，按分值计算。',
-    { subject: '易' },
-  ),
-  makeRow(
-    'C-12',
-    '中档分值占比（0.60–0.80）',
-    '难度分布',
-    50,
-    0,
-    '整卷',
-    '表 2-2：难度目标 易（≥0.80）30%、中（0.60–0.80）50%、难（<0.60）20%，按分值计算。',
-    { subject: '中' },
-  ),
-  makeRow(
-    'C-13',
-    '难档分值占比（< 0.60）',
-    '难度分布',
-    20,
-    0,
-    '整卷',
-    '表 2-2：难度目标 易（≥0.80）30%、中（0.60–0.80）50%、难（<0.60）20%，按分值计算。',
-    { subject: '难' },
-  ),
-];
+/** 契约项由当前课程配置生成：满分 / 题量 / 时长 / 题型配比 / 覆盖率 / 难度。 */
+export const DEFAULT_ROWS: ContractRow[] = (() => {
+  const pack = COURSE_PACK;
+  const source = pack.template.sourceLabel;
+  const total = pack.counts.totalScore;
+  const count = pack.counts.questionCount;
+  const duration = pack.counts.durationMinutes;
+  const rows: ContractRow[] = [
+    makeRow(
+      'C-01',
+      '全卷满分',
+      '满分',
+      total,
+      0,
+      '整卷',
+      `${source}：${pack.template.examName}，闭卷，${duration} 分钟，满分 ${total} 分。`,
+    ),
+    makeRow(
+      'C-02',
+      '全卷题量',
+      '题量',
+      count,
+      0,
+      '整卷',
+      `${source}：题目总量 ${count} 题（${pack.questionTypes
+        .map((type) => `${type.label} ${type.targetCount}`)
+        .join(' + ')}）。`,
+    ),
+    makeRow(
+      'C-03',
+      '考试时长',
+      '考试时长',
+      duration,
+      0,
+      '整卷',
+      `${source}：闭卷，${duration} 分钟。`,
+    ),
+  ];
+
+  pack.questionTypes.forEach((type, index) => {
+    const typeScore = type.targetCount * type.score;
+    const share = TYPE_SHARES[type.label] ?? 0;
+    rows.push(
+      makeRow(
+        `C-${String(4 + index).padStart(2, '0')}`,
+        `${type.label}分值占比`,
+        '题型配比',
+        share,
+        type.band,
+        '整卷',
+        `${source}：${type.label} ${type.targetCount} 题 × ${type.score} 分 = ${typeScore} 分，占 ${total} 分的 ${share}%。`,
+        {
+          subject: type.label,
+          recoveryHint: pack.suggestionByType[type.label],
+        },
+      ),
+    );
+  });
+
+  const typeCount = pack.questionTypes.length;
+  const coverageId = `C-${String(4 + typeCount).padStart(2, '0')}`;
+  const chapterId = `C-${String(5 + typeCount).padStart(2, '0')}`;
+  const expectedId = `C-${String(6 + typeCount).padStart(2, '0')}`;
+
+  rows.push(
+    makeRow(
+      coverageId,
+      '知识点覆盖率',
+      '知识点覆盖率',
+      pack.template.coverageTarget.minRate,
+      0,
+      '整卷',
+      `${source}：知识点覆盖率 ≥ ${pack.template.coverageTarget.minRate}%，且每章至少命中 ${pack.template.coverageTarget.minPerChapter} 题。`,
+      { comparator: '≥' },
+    ),
+    makeRow(
+      chapterId,
+      '每章至少命中题数',
+      '章节覆盖',
+      pack.template.coverageTarget.minPerChapter,
+      0,
+      CHAPTER_SCOPE,
+      `${source}：知识点覆盖率 ≥ ${pack.template.coverageTarget.minRate}%，且每章至少命中 ${pack.template.coverageTarget.minPerChapter} 题。`,
+      { comparator: '≥' },
+    ),
+    makeRow(
+      expectedId,
+      '整卷期望难度',
+      '期望难度',
+      pack.template.difficultyPlan.expected,
+      pack.template.difficultyPlan.tolerance,
+      '整卷',
+      `${source}：整卷期望难度目标 ${pack.template.difficultyPlan.expected} ± ${pack.template.difficultyPlan.tolerance}。`,
+    ),
+  );
+
+  pack.difficultyBands.forEach((band, index) => {
+    rows.push(
+      makeRow(
+        `C-${String(7 + typeCount + index).padStart(2, '0')}`,
+        `${band.level}档分值占比`,
+        '难度分布',
+        band.scoreRatio,
+        0,
+        '整卷',
+        `${source}：难度目标 易 / 中 / 难 按分值计算；${band.level}档目标 ${band.scoreRatio}%。`,
+        { subject: band.level },
+      ),
+    );
+  });
+
+  return rows;
+})();
+
 
 /* ===== 格式化 ===== */
 
@@ -415,16 +438,24 @@ export function buildExpression(row: ContractRow): string {
 }
 
 export function buildEvalText(row: ContractRow, rows: ContractRow[]): string {
+  const total =
+    rows.find((candidate) => candidate.group === 'total')?.targetValue ??
+    COURSE_PACK.counts.totalScore;
+  const count =
+    rows.find((candidate) => candidate.group === 'count')?.targetValue ??
+    COURSE_PACK.counts.questionCount;
+  const duration =
+    rows.find((candidate) => candidate.group === 'duration')?.targetValue ??
+    COURSE_PACK.counts.durationMinutes;
+
   switch (row.group) {
     case 'total':
-      return `满分口径 100 分；判定区间 ${formatRange(row)}。`;
+      return `满分口径 ${formatNumber(total)} 分；判定区间 ${formatRange(row)}。`;
     case 'count':
-      return `全卷题量口径 26 题；判定区间 ${formatRange(row)}。`;
+      return `全卷题量口径 ${formatNumber(count)} 题；判定区间 ${formatRange(row)}。`;
     case 'duration':
-      return `考试时长口径 120 分钟；判定区间 ${formatRange(row)}。`;
+      return `考试时长口径 ${formatNumber(duration)} 分钟；判定区间 ${formatRange(row)}。`;
     case 'typeShare': {
-      const total =
-        rows.find((candidate) => candidate.group === 'total')?.targetValue ?? 100;
       const score = (row.targetValue / 100) * total;
       return `占${row.scope}分值 ${formatNumber(row.targetValue)}% × ${formatNumber(
         total,
@@ -435,10 +466,10 @@ export function buildEvalText(row: ContractRow, rows: ContractRow[]): string {
     case 'expectedDifficulty':
       return `整卷加权；判定区间 ${formatRange(row)}。`;
     case 'coverage':
-      return `蓝图阈值 90%；当前目标 ≥ ${formatNumber(row.targetValue)}%。`;
+      return `蓝图阈值 ${formatNumber(
+        COURSE_PACK.template.coverageTarget.minRate,
+      )}%；当前目标 ≥ ${formatNumber(row.targetValue)}%。`;
     case 'chapterCoverage': {
-      const count =
-        rows.find((candidate) => candidate.group === 'count')?.targetValue ?? 26;
       return `${CHAPTERS.length} 章 × ${formatNumber(row.targetValue)} 题/章 = ${formatNumber(
         row.targetValue * CHAPTERS.length,
       )} 题；全卷题量 ${formatNumber(count)} 题。`;
@@ -482,15 +513,13 @@ export function defaultValuesFor(
 ): { targetValue: number; tolerance: number } {
   switch (constraintType) {
     case '满分':
-      return { targetValue: 100, tolerance: 0 };
+      return { targetValue: BLUEPRINT.total?.value ?? 100, tolerance: 0 };
     case '题量':
-      return { targetValue: 26, tolerance: 0 };
+      return { targetValue: BLUEPRINT.count?.value ?? 20, tolerance: 0 };
     case '考试时长':
-      return { targetValue: 120, tolerance: 0 };
+      return { targetValue: BLUEPRINT.duration?.value ?? 120, tolerance: 0 };
     case '题型配比': {
-      const blueprint = subject
-        ? BLUEPRINT[`typeShare:${subject}`]
-        : undefined;
+      const blueprint = subject ? BLUEPRINT[`typeShare:${subject}`] : undefined;
       return {
         targetValue: blueprint?.value ?? 30,
         tolerance: blueprint?.band ?? 3,
@@ -503,11 +532,14 @@ export function defaultValuesFor(
       return { targetValue: blueprint?.value ?? 30, tolerance: 0 };
     }
     case '期望难度':
-      return { targetValue: 0.65, tolerance: 0.05 };
+      return {
+        targetValue: BLUEPRINT.expectedDifficulty?.value ?? 0.65,
+        tolerance: BLUEPRINT.expectedDifficulty?.band ?? 0.05,
+      };
     case '知识点覆盖率':
-      return { targetValue: 90, tolerance: 0 };
+      return { targetValue: BLUEPRINT.coverage?.value ?? 90, tolerance: 0 };
     case '章节覆盖':
-      return { targetValue: 1, tolerance: 0 };
+      return { targetValue: BLUEPRINT.chapterCoverage?.value ?? 1, tolerance: 0 };
   }
 }
 
