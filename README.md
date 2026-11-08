@@ -4,20 +4,42 @@
 
 ## 启动
 
+> **不要直接双击 `index.html` 或 `dist/index.html`。** 这不是静态单文件页面，浏览器以 `file://` 打开时无法加载 Vite 的 TypeScript / React 模块，会显示空白。必须通过本地 HTTP 服务打开。
+
+### Windows 一键启动
+
+双击项目根目录的 **`start-demo.cmd`**：会自动检查 `npm`、必要时执行 `npm install`，启动 Vite 并打开浏览器。
+
+### 手动启动
+
 ```bash
 cd papercompile
 npm install
 npm run dev
 ```
 
-浏览器打开 `http://localhost:5173`（Vite 默认端口；如被占用以终端输出为准）。
+终端会输出地址，浏览器打开：
 
-```bash
-npm run build    # tsc --noEmit + vite build
-npm run preview  # 预览构建产物
+```text
+http://localhost:5173/
 ```
 
-要求 Node.js 18+。项目为纯前端 MVP，不依赖后端、数据库或 DOCX/PDF 库；打印使用浏览器原生 `window.print()`。
+根路径会自动跳转到 `/outline`。若 5173 被占用，Vite 会换端口，以终端实际输出为准。也可以直接：
+
+```bash
+npm run dev -- --open
+```
+
+### 构建后预览
+
+```bash
+npm run build
+npm run preview
+```
+
+打开 `http://localhost:4173/`。同样**不要**直接双击 `dist/index.html`；`dist/assets` 使用绝对路径，需由 `vite preview` 提供 HTTP 服务。
+
+要求 Node.js 18+（安装包自带 `npm`；终端执行 `node -v`、`npm -v` 可检查）。若使用 pnpm，可把命令替换为 `pnpm install` / `pnpm dev`。项目为纯前端 MVP，不依赖后端、数据库或 DOCX/PDF 库；打印使用浏览器原生 `window.print()`。
 
 ## 七步闭环
 
