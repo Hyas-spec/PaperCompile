@@ -233,6 +233,30 @@ export class PropositionScheduler {
       return;
     }
 
+    await this.runPartial(
+      selected,
+      `局部重出：${filter.chapter ?? '全部章节'} × ${filter.questionType ?? '全部题型'}，${selected.length} 个任务；其余任务与候选保持不变`,
+    );
+  }
+
+  async regenerateTask(taskId: string): Promise<void> {
+    if (this.running || this.tasks.length === 0) return;
+    const task = this.tasks.find((candidate) => candidate.id === taskId);
+    if (!task) {
+      this.log('调度队列', `单题增量重出未找到任务 ${taskId}`, 'hint');
+      return;
+    }
+    await this.runPartial(
+      [task],
+      `单题增量重出：${task.id}；其余任务与版本保持不变`,
+    );
+  }
+
+  private async runPartial(
+    selected: PlannedTask[],
+    label: string,
+  ): Promise<void> {
+    if (this.running || selected.length === 0) return;
     this.running = true;
     this.round += 1;
     this.hooks.onStatus('运行中');
@@ -242,11 +266,7 @@ export class PropositionScheduler {
       this.records.delete(taskId);
       this.failed.delete(taskId);
     });
-    this.log(
-      '调度队列',
-      `局部重出：${filter.chapter ?? '全部章节'} × ${filter.questionType ?? '全部题型'}，${selected.length} 个任务；其余任务与候选保持不变`,
-      'info',
-    );
+    this.log('调度队列', label, 'info');
 
     try {
       await this.runTasks(selected, this.round);

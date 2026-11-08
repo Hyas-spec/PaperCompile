@@ -46,6 +46,7 @@ interface PropositionState {
   overview: typeof PROPOSITION_OVERVIEW;
   start: () => Promise<void>;
   regenerate: (filter: RegenerateFilter) => Promise<void>;
+  regenerateTask: (taskId: string) => Promise<void>;
   retryFailed: () => Promise<void>;
   selectTask: (taskId: string) => void;
 }
@@ -182,6 +183,11 @@ export const usePropositionStore = create<PropositionState>((set, get) => ({
   regenerate: async (filter) => {
     if (!scheduler) return;
     await scheduler.regenerate(filter);
+  },
+
+  regenerateTask: async (taskId) => {
+    if (!scheduler) return;
+    await scheduler.regenerateTask(taskId);
   },
 
   retryFailed: async () => {

@@ -50,6 +50,7 @@ interface PaperState {
   knowledgeDraft: KnowledgePointDraft[] | null;
   advanceStatus: () => void;
   advanceStage: () => void;
+  returnToReview: () => void;
   setKnowledgeDraft: (items: KnowledgePointDraft[]) => void;
 }
 
@@ -64,6 +65,9 @@ export const usePaperStore = create<PaperState>((set, get) => ({
   advanceStage: () => {
     const next = nextStage(get().stage);
     if (next) set({ stage: next });
+  },
+  returnToReview: () => {
+    if (get().status === '已审') set({ status: '待审' });
   },
   setKnowledgeDraft: (items) => set({ knowledgeDraft: items }),
 }));
