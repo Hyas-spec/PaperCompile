@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import type { QuestionType, ThreeStateConclusion } from '../types';
 import type {
   CandidateRun,
@@ -9,6 +10,7 @@ import {
   usePropositionStore,
   type PropositionTaskRun,
 } from '../store/proposition';
+import { usePaperStore } from '../store';
 import {
   CHAPTER_DEFS,
   QUESTION_TYPE_DEFS,
@@ -311,6 +313,13 @@ function CandidateDetail({ record }: { record: CandidateRun }) {
 
 export default function PropositionPage() {
   const status = usePropositionStore((state) => state.status);
+  const advanceStageTo = usePaperStore((state) => state.advanceStageTo);
+
+  useEffect(() => {
+    if (status === '已完成') {
+      advanceStageTo('教师终审');
+    }
+  }, [status, advanceStageTo]);
   const tasks = usePropositionStore((state) => state.tasks);
   const candidates = usePropositionStore((state) => state.candidates);
   const interceptions = usePropositionStore((state) => state.interceptions);
@@ -475,6 +484,11 @@ export default function PropositionPage() {
             >
               {startLabel}
             </button>
+            {status === '已完成' && (
+              <Link className="proposition-btn is-primary" to="/review">
+                题目审查台 →
+              </Link>
+            )}
           </div>
         </div>
 

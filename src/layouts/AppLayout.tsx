@@ -1,12 +1,18 @@
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { PAGE_ROUTES } from '../router/routes';
-import { PAPER_STATUS_FLOW, usePaperStore } from '../store';
+import {
+  PAPER_STATUS_FLOW,
+  PIPELINE_STAGES,
+  usePaperStore,
+} from '../store';
 
 const ARCHITECTURE_LAYERS = ['交互层', '编译层', '协同层', '数据层', '模型层'];
 
 export default function AppLayout() {
   const { pathname } = useLocation();
   const status = usePaperStore((state) => state.status);
+  const stage = usePaperStore((state) => state.stage);
+  const stageIndex = PIPELINE_STAGES.indexOf(stage) + 1;
   const currentPage = PAGE_ROUTES.find((route) => route.path === pathname);
 
   return (
@@ -51,6 +57,11 @@ export default function AppLayout() {
                 <strong>{currentPage.label}</strong>
               </>
             )}
+          </div>
+
+          <div className="pipeline-stage" title="七步闭环">
+            <span>阶段 {stageIndex}/7</span>
+            <strong>{stage}</strong>
           </div>
 
           <div className="status-wrap">

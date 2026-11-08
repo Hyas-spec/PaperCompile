@@ -2,12 +2,20 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { CandidateQuestion, QuestionType } from '../types';
 import { usePropositionStore } from '../store/proposition';
+import { useReviewStore } from '../store/review';
 import { usePaperStore } from '../store';
+import { useAuditLogStore } from '../store/audit';
 import {
   makeSnapshot,
   nextPaperVersion,
   useComposeStore,
 } from '../store/compose';
+import { assertPermission } from '../hooks/usePermission';
+import {
+  DEMO_COURSE_ID,
+  DEMO_USER,
+} from '../store/session';
+import { resolveFinalQuestions } from './finalPaper';
 import '../styles/compose.css';
 
 type PaperView = 'student' | 'teacher';
@@ -489,8 +497,12 @@ function PaperPreview({
 
 export default function ComposePage() {
   const draft = usePropositionStore((state) => state.draft);
+  const propositionCandidates = usePropositionStore((state) => state.candidates);
+  const reviewDecisions = useReviewStore((state) => state.decisions);
+  const appendAudit = useAuditLogStore((state) => state.append);
   const paperStatus = usePaperStore((state) => state.status);
   const advanceStatus = usePaperStore((state) => state.advanceStatus);
+  const advanceStageTo = usePaperStore((state) => state.advanceStageTo);
   const snapshots = useComposeStore((state) => state.snapshots);
   const workingVersion = useComposeStore((state) => state.workingVersion);
   const derivedFrom = useComposeStore((state) => state.derivedFrom);
@@ -508,8 +520,12 @@ export default function ComposePage() {
   const locked = Boolean(lastSnapshot) && derivedFrom === null;
   const baseQuestions = useMemo(() => {
     if (lastSnapshot) return lastSnapshot.questions;
-    return draft?.questions ?? [];
-  }, [lastSnapshot, draft]);
+    return resolveFinalQuestions(
+      draft?.questions ?? [],
+      propositionCandidates,
+      reviewDecisions,
+    );
+  }, [lastSnapshot, draft, propositionCandidates, reviewDecisions]);
 
   useEffect(() => {
     const numbers = baseQuestions.map((question) => question.questionNo);
@@ -587,6 +603,7 @@ export default function ComposePage() {
 
   const signPaper = () => {
     if (!signable || !signReason.trim() || ordered.length === 0) return;
+    assertPermission(DEMO_USER, 'sign', DEMO_COURSE_ID);
     const snapshot = makeSnapshot({
       paperNo: PAPER.paperNo,
       version: currentVersion,
@@ -603,20 +620,39 @@ export default function ComposePage() {
       totalScore,
       durationMinutes: duration,
     });
+    appendAudit({
+      operator: DEMO_USER,
+      action: 'sign',
+      resourceType: '试卷',
+      resourceId: PAPER.paperNo,
+      courseId: DEMO_COURSE_ID,
+      beforeStatus: paperStatus,
+      afterStatus: paperStatus === '已审' ? '已签发' : paperStatus,
+      reason: signReason.trim(),
+    });
     signSnapshot(snapshot);
-    if (paperStatus === '已审') advanceStatus();
+    if (paperStatus === '已审') {
+      advanceStatus();
+      advanceStageTo('成卷 / 打印 / 回放');
+    }
     setSignOpen(false);
     setSignReason('');
     setNotice(`已签发 ${snapshot.version}；快照 ${snapshot.fingerprint} 已固化。`);
   };
 
   const derivePaper = () => {
+    assertPermission(DEMO_USER, 'sign', DEMO_COURSE_ID);
     const version = deriveVersion();
     if (!version) return;
     setDeriveOpen(false);
     setNotice(
       `已派生 ${version}；${lastSnapshot?.version ?? ''} 快照保持不可变，可调整题序后重新签发。`,
     );
+  };
+
+  const printPaper = () => {
+    assertPermission(DEMO_USER, 'export', DEMO_COURSE_ID);
+    window.print();
   };
 
   const statusText = locked
@@ -706,11 +742,14 @@ export default function ComposePage() {
             <button
               type="button"
               className="compose-btn"
-              onClick={() => window.print()}
+              onClick={printPaper}
               disabled={ordered.length === 0}
             >
               打印
             </button>
+            <Link className="compose-btn" to="/replay">
+              过程回放
+            </Link>
             {locked ? (
               <button
                 type="button"

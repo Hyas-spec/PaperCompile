@@ -15,6 +15,13 @@ import {
   type ReviewDecision,
 } from '../store/review';
 import { usePaperStore } from '../store';
+import { useAuditLogStore } from '../store/audit';
+import { assertPermission } from '../hooks/usePermission';
+import {
+  DEMO_COURSE_ID,
+  DEMO_PAPER_ID,
+  DEMO_USER,
+} from '../store/session';
 import { useContractStore } from '../store/contract';
 import { useKnowledgeStore } from '../store/knowledge';
 import {
@@ -226,11 +233,12 @@ export default function ReviewPage() {
   const decisions = useReviewStore((state) => state.decisions);
   const audit = useReviewStore((state) => state.audit);
   const decide = useReviewStore((state) => state.decide);
+  const appendAudit = useAuditLogStore((state) => state.append);
   const contract = useContractStore((state) => state.contract);
   const points = useKnowledgeStore((state) => state.points);
-  const paperStatus = usePaperStore((state) => state.status);
   const advanceStatus = usePaperStore((state) => state.advanceStatus);
   const returnToReview = usePaperStore((state) => state.returnToReview);
+  const advanceStageTo = usePaperStore((state) => state.advanceStageTo);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [traceOpen, setTraceOpen] = useState(false);
@@ -310,23 +318,58 @@ export default function ReviewPage() {
 
   useEffect(() => {
     if (pool.length === 0) return;
-    if (paperStatus === '草稿') {
+    const currentStatus = usePaperStore.getState().status;
+    if (currentStatus === '草稿') {
+      appendAudit({
+        operator: DEMO_USER,
+        action: 'review',
+        resourceType: '试卷',
+        resourceId: DEMO_PAPER_ID,
+        courseId: DEMO_COURSE_ID,
+        beforeStatus: '草稿',
+        afterStatus: '待审',
+        reason: '进入逐题终审',
+      });
       advanceStatus();
+      advanceStageTo('教师终审');
       return;
     }
-    if (pending === 0 && paperStatus === '待审') {
+    if (pending === 0 && currentStatus === '待审') {
+      appendAudit({
+        operator: DEMO_USER,
+        action: 'review',
+        resourceType: '试卷',
+        resourceId: DEMO_PAPER_ID,
+        courseId: DEMO_COURSE_ID,
+        beforeStatus: '待审',
+        afterStatus: '已审',
+        reason: `${reviewed} 题逐题终审完成`,
+      });
       advanceStatus();
+      advanceStageTo('成卷 / 打印 / 回放');
       return;
     }
-    if (pending > 0 && paperStatus === '已审') {
+    if (pending > 0 && currentStatus === '已审') {
+      appendAudit({
+        operator: DEMO_USER,
+        action: 'review',
+        resourceType: '试卷',
+        resourceId: DEMO_PAPER_ID,
+        courseId: DEMO_COURSE_ID,
+        beforeStatus: '已审',
+        afterStatus: '待审',
+        reason: '换题后出现待审题目，回到待审',
+      });
       returnToReview();
     }
   }, [
     pool.length,
     pending,
-    paperStatus,
+    reviewed,
     advanceStatus,
+    advanceStageTo,
     returnToReview,
+    appendAudit,
   ]);
 
   const toggleTrace = () => {
@@ -378,6 +421,7 @@ export default function ReviewPage() {
   const confirmAction = async () => {
     if (!selected || !action || !reason.trim()) return;
     if (action === '改写' && !revisedStem.trim()) return;
+    assertPermission(DEMO_USER, 'review', DEMO_COURSE_ID);
 
     setSubmitting(true);
     const entry = decide(
@@ -710,6 +754,11 @@ export default function ReviewPage() {
           </div>
           <div className="review-toolbar-right">
             {busy && <span className="review-busy">单题重出中…</span>}
+            {pending === 0 && (
+              <Link className="review-audit-btn" to="/compose">
+                成卷与导出 →
+              </Link>
+            )}
             <button
               type="button"
               className="review-audit-btn"

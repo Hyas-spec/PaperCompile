@@ -256,6 +256,32 @@ a {
   overflow: auto;
 }
 
+.pipeline-stage {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: 18px;
+  color: var(--pc-muted);
+  font-family: var(--pc-font-ui);
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.pipeline-stage span {
+  padding: 1px 5px;
+  border: 1px solid var(--pc-border);
+  border-radius: var(--pc-radius);
+  background: var(--pc-bg);
+  font-family: var(--pc-font-mono);
+  font-size: 9px;
+}
+
+.pipeline-stage strong {
+  color: var(--pc-accent);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
 .page {
   flex: 1;
   display: flex;

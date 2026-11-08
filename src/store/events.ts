@@ -14,6 +14,7 @@ import type {
 import type { CandidateRun, RunLog } from '../agents/scheduler';
 import type { ReviewAuditEntry } from './review';
 import type { PaperSnapshot } from './compose';
+import type { AuditEntry } from './audit';
 import { fingerprintOf } from './compose';
 
 export type ReplayEventKind = 'Agent 调用' | '教师操作' | '版本变更';
@@ -34,7 +35,7 @@ export interface ReplayEvent {
   reason?: string;
   evidence: string[];
   tone: ReplayTone;
-  origin: 'proposition' | 'review' | 'compose' | 'recompile';
+  origin: 'proposition' | 'review' | 'compose' | 'recompile' | 'audit';
 }
 
 export interface ReplayFilters {
@@ -86,6 +87,7 @@ export interface ReplaySources {
   logs: RunLog[];
   draft: PaperDraft | null;
   audit: ReviewAuditEntry[];
+  auditLog: readonly AuditEntry[];
   snapshots: PaperSnapshot[];
   derivedFrom: string | null;
   workingVersion: string;
@@ -316,6 +318,27 @@ const buildEvents = (sources: ReplaySources): ReplayEvent[] => {
     });
   });
 
+  sources.auditLog.forEach((entry) => {
+    events.push({
+      id: `audit-${entry.id}`,
+      timestamp: entry.timestamp,
+      kind: '版本变更',
+      actor: entry.operatorName,
+      title: `试卷状态 · ${entry.afterStatus}`,
+      summary: `${entry.beforeStatus} → ${entry.afterStatus} · ${entry.reason}`,
+      input: `状态 ${entry.beforeStatus}`,
+      output: `状态 ${entry.afterStatus}`,
+      reason: entry.reason,
+      evidence: [
+        `操作者：${entry.operatorName}（${entry.role}）`,
+        `资源：${entry.resourceType} ${entry.resourceId}`,
+        `前后状态：${entry.beforeStatus} → ${entry.afterStatus}`,
+      ],
+      tone: entry.afterStatus === '已签发' ? 'pass' : 'info',
+      origin: 'audit',
+    });
+  });
+
   sources.snapshots.forEach((snapshot) => {
     if (snapshot.derivedFrom) {
       events.push({
@@ -502,6 +525,11 @@ const buildSnapshots = (
       content: `签发 ${snapshot.version}`,
       location: '整卷',
       reason: snapshot.reason,
+    })),
+    ...sources.auditLog.map((entry) => ({
+      content: `状态 ${entry.beforeStatus} → ${entry.afterStatus}`,
+      location: '整卷',
+      reason: entry.reason,
     })),
   ];
 

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { usePaperStore } from '../store';
 import '../styles/blueprint.css';
 
 const TYPES = [
@@ -297,6 +299,14 @@ export default function BlueprintPage() {
   const difficultyPass =
     Math.abs(displayedDifficulty - DIFFICULTY_TARGET) <= DIFFICULTY_BAND + 1e-9;
   const allPass = scorePass && coveragePass && deviationPass && difficultyPass;
+  const navigate = useNavigate();
+  const advanceStageTo = usePaperStore((state) => state.advanceStageTo);
+
+  const goContract = () => {
+    if (!allPass) return;
+    advanceStageTo('命题契约');
+    navigate('/contract');
+  };
 
   const worstType = typeRows.reduce((worst, row) =>
     Math.abs(row.deviation) > Math.abs(worst.deviation) ? row : worst,
@@ -485,6 +495,15 @@ export default function BlueprintPage() {
               disabled={history.length === 0}
             >
               回退{history.length > 0 ? ` (${history.length})` : ''}
+            </button>
+            <button
+              type="button"
+              className="blueprint-btn is-primary"
+              onClick={goContract}
+              disabled={!allPass}
+              title={allPass ? '蓝图校验通过，进入契约编辑器' : '蓝图校验未通过，先按提示调整'}
+            >
+              下一步 · 契约编辑器
             </button>
           </div>
         </div>

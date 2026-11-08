@@ -12,6 +12,7 @@ import { usePropositionStore } from '../store/proposition';
 import { useReviewStore, type ReviewDecision } from '../store/review';
 import { useComposeStore } from '../store/compose';
 import { usePaperStore } from '../store';
+import { useAuditLogStore } from '../store/audit';
 import { useContractStore } from '../store/contract';
 import { useKnowledgeStore } from '../store/knowledge';
 import {
@@ -436,6 +437,7 @@ export default function ReplayPage() {
   const derivedFrom = useComposeStore((state) => state.derivedFrom);
   const workingVersion = useComposeStore((state) => state.workingVersion);
   const paperStatus = usePaperStore((state) => state.status);
+  const statusAuditLog = useAuditLogStore((state) => state.entries);
   const contract = useContractStore((state) => state.contract);
   const points = useKnowledgeStore((state) => state.points);
 
@@ -496,6 +498,7 @@ export default function ReplayPage() {
       logs,
       draft,
       audit,
+      auditLog: statusAuditLog,
       snapshots,
       derivedFrom,
       workingVersion,
@@ -510,6 +513,7 @@ export default function ReplayPage() {
     logs,
     draft,
     audit,
+    statusAuditLog,
     snapshots,
     derivedFrom,
     workingVersion,

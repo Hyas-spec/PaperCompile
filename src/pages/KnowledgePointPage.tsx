@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { MOCK_OUTLINE } from './outlineData';
 import { usePaperStore } from '../store';
 import {
@@ -175,6 +176,12 @@ export default function KnowledgePointPage() {
   const applyWeight = useKnowledgeStore((state) => state.applyWeight);
   const restoreBaseline = useKnowledgeStore((state) => state.restoreBaseline);
   const saveBaseline = useKnowledgeStore((state) => state.saveBaseline);
+  const advanceStageTo = usePaperStore((state) => state.advanceStageTo);
+
+  const handleSaveBaseline = () => {
+    saveBaseline();
+    advanceStageTo('命题蓝图');
+  };
 
   const [chapterFilter, setChapterFilter] = useState('all');
   const [expandedChapters, setExpandedChapters] = useState<Set<string>>(
@@ -603,11 +610,14 @@ export default function KnowledgePointPage() {
             <button
               type="button"
               className="knowledge-btn is-primary"
-              onClick={saveBaseline}
+              onClick={handleSaveBaseline}
               disabled={!dirty}
             >
               保存基线
             </button>
+            <Link className="knowledge-btn" to="/blueprint">
+              下一步 · 蓝图看板
+            </Link>
           </div>
         </div>
 

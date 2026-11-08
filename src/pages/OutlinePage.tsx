@@ -10,6 +10,7 @@ export default function OutlinePage() {
   const { chapters, candidates, fileName, pageCount } = MOCK_OUTLINE;
   const knowledgeDraft = usePaperStore((state) => state.knowledgeDraft);
   const setKnowledgeDraft = usePaperStore((state) => state.setKnowledgeDraft);
+  const advanceStageTo = usePaperStore((state) => state.advanceStageTo);
 
   const [selectedChapterId, setSelectedChapterId] = useState('all');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -130,6 +131,7 @@ export default function OutlinePage() {
     }));
 
     setKnowledgeDraft(items);
+    advanceStageTo('知识点');
   };
 
   return (

@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { usePaperStore } from '../store';
 import {
   CHAPTER_SCOPE,
   CONSTRAINT_META,
@@ -182,6 +184,15 @@ export default function ContractPage() {
     setDirty(false);
   };
 
+  const navigate = useNavigate();
+  const advanceStageTo = usePaperStore((state) => state.advanceStageTo);
+
+  const goProposition = () => {
+    if (dirty || !savedAt) return;
+    advanceStageTo('AI 出题 / 审题');
+    navigate('/proposition');
+  };
+
   const saveState = dirty
     ? savedAt
       ? '有未保存修改'
@@ -290,6 +301,15 @@ export default function ContractPage() {
               title={dirty ? '保存为命题契约 v1' : '当前没有未保存修改'}
             >
               {saveLabel}
+            </button>
+            <button
+              type="button"
+              className="contract-save"
+              onClick={goProposition}
+              disabled={dirty || !savedAt}
+              title={dirty ? '请先保存契约' : '进入命题工作区'}
+            >
+              下一步 · 命题工作区
             </button>
           </div>
         </div>

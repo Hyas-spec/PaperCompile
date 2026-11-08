@@ -50,6 +50,7 @@ interface PaperState {
   knowledgeDraft: KnowledgePointDraft[] | null;
   advanceStatus: () => void;
   advanceStage: () => void;
+  advanceStageTo: (stage: PipelineStage) => void;
   returnToReview: () => void;
   setKnowledgeDraft: (items: KnowledgePointDraft[]) => void;
 }
@@ -66,8 +67,15 @@ export const usePaperStore = create<PaperState>((set, get) => ({
     const next = nextStage(get().stage);
     if (next) set({ stage: next });
   },
+  advanceStageTo: (stage) => {
+    const currentIndex = PIPELINE_STAGES.indexOf(get().stage);
+    const targetIndex = PIPELINE_STAGES.indexOf(stage);
+    if (targetIndex > currentIndex) set({ stage });
+  },
   returnToReview: () => {
-    if (get().status === '已审') set({ status: '待审' });
+    if (get().status === '已审') {
+      set({ status: '待审', stage: '教师终审' });
+    }
   },
   setKnowledgeDraft: (items) => set({ knowledgeDraft: items }),
 }));
