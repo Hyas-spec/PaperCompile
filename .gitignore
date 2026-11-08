@@ -44,3 +44,6 @@ desktop.ini
 tmp/
 temp/
 *.local
+
+# 脚本编译产物
+scripts/*.mjs
